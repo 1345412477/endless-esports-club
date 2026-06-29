@@ -1,0 +1,20 @@
+{
+  "name": "cs-worker-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "客服-员工-管理三端对接系统",
+  "scripts": {
+    "dev:server": "node server/index.js",
+    "dev:client": "cd client && npx vite --host",
+    "dev": "node server/index.js & cd client && npx vite --host",
+    "build": "cd client && npx vite build",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "sql.js": "^1.14.1"
+  }
+}
