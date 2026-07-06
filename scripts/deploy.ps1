@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    无尽电竞业务系统 - 自动化部署脚本
+    Endless Esports Club - Automated Deployment Script
 .DESCRIPTION
-    支持版本切换、自动备份、回滚、依赖安装、前端构建和服务重启
+    Supports version switching, auto-backup, rollback, dependency install, and service restart.
 .EXAMPLE
     .\deploy.ps1 -Version v1.1.0
     .\deploy.ps1 -Latest
@@ -61,7 +61,7 @@ function Save-CurrentVersion {
 }
 
 function Invoke-Backup {
-    Write-Step "执行备份"
+    Write-Step "Creating backup..."
     if (-not (Test-Path $BackupDir)) {
         New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
     }
@@ -72,10 +72,10 @@ function Invoke-Backup {
     if (Test-Path $DbPath) {
         $dbBak = Join-Path $BackupDir "${prefix}_data.db"
         Copy-Item $DbPath $dbBak -Force
-        Write-OK "数据库备份: $dbBak"
+        Write-OK "Database backup: $dbBak"
     }
     else {
-        Write-Warn "数据库文件不存在，跳过备份"
+        Write-Warn "Database file not found, skipping"
     }
 
     foreach ($f in @("ecosystem.config.js")) {
@@ -98,148 +98,148 @@ function Invoke-Backup {
 
 function Invoke-Restore {
     param([string]$backupFile)
-    if (-not $backupFile) { Write-Err "请指定备份文件路径"; return }
-    if (-not (Test-Path $backupFile)) { Write-Err "备份文件不存在: $backupFile"; return }
+    if (-not $backupFile) { Write-Err "Please specify backup file path"; return }
+    if (-not (Test-Path $backupFile)) { Write-Err "Backup file not found: $backupFile"; return }
 
-    Write-Step "恢复数据库"
-    Write-Info "停止服务..."
+    Write-Step "Restoring database..."
+    Write-Info "Stopping service..."
     pm2 stop esports-club 2>$null
     Copy-Item $backupFile $DbPath -Force
-    Write-OK "数据库已恢复"
-    Write-Info "启动服务..."
+    Write-OK "Database restored"
+    Write-Info "Starting service..."
     pm2 start esports-club 2>$null
-    Write-OK "服务已启动"
+    Write-OK "Service started"
     Write-Log "Restored from: $backupFile"
 }
 
 function Invoke-Rollback {
-    Write-Step "执行回滚"
-    if (-not (Test-GitRepo)) { Write-Err "不是 Git 仓库"; return }
+    Write-Step "Rolling back..."
+    if (-not (Test-GitRepo)) { Write-Err "Not a Git repository"; return }
 
     Push-Location $ProjectDir
     try {
         $tags = git tag -l --sort=-version:refname | Select-Object -First 5
-        if ($tags.Count -lt 2) { Write-Err "没有可回滚的版本"; return }
+        if ($tags.Count -lt 2) { Write-Err "No previous version to rollback to"; return }
 
         $prev = $tags[1]
-        Write-Info "当前版本: $($tags[0])"
-        Write-Info "回滚到: $prev"
+        $current = $tags[0]
+        Write-Info "Current: $current => Rollback to: $prev"
 
         Invoke-Backup
-        Write-Info "切换代码..."
+        Write-Info "Switching code..."
         git checkout $prev --force
         Invoke-Build
         Save-CurrentVersion $prev
-        Write-OK "已回滚到 $prev"
+        Write-OK "Rolled back to $prev"
         Write-Log "Rolled back to: $prev"
     }
-    catch { Write-Err "回滚失败: $_" }
+    catch { Write-Err "Rollback failed: $_" }
     finally { Pop-Location }
 }
 
 function Invoke-InstallDeps {
-    Write-Step "安装依赖"
+    Write-Step "Installing dependencies..."
     Push-Location $ProjectDir
     try {
-        Write-Info "后端依赖..."
+        Write-Info "Backend dependencies..."
         npm install --production
-        Write-Info "前端依赖..."
+        Write-Info "Frontend dependencies..."
         Push-Location "client"
         npm install
         Pop-Location
-        Write-OK "依赖安装完成"
+        Write-OK "Dependencies installed"
     }
-    catch { Write-Err "依赖安装失败: $_" }
+    catch { Write-Err "Dependency install failed: $_" }
     finally { Pop-Location }
 }
 
 function Invoke-Build {
-    Write-Step "构建前端"
+    Write-Step "Building frontend..."
     Push-Location $ProjectDir
     try {
         npm run build
-        Write-OK "构建完成"
+        Write-OK "Build completed"
     }
-    catch { Write-Err "构建失败: $_" }
+    catch { Write-Err "Build failed: $_" }
     finally { Pop-Location }
 }
 
 function Invoke-DeployVersion {
     param([string]$targetVersion)
-    if (-not (Test-GitRepo)) { Write-Err "不是 Git 仓库"; return }
+    if (-not (Test-GitRepo)) { Write-Err "Not a Git repository"; return }
 
     Push-Location $ProjectDir
     try {
         $exists = git tag -l | Where-Object { $_ -eq $targetVersion }
         if (-not $exists) {
-            Write-Err "标签不存在: $targetVersion"
-            Write-Info "可用版本:"
+            Write-Err "Tag not found: $targetVersion"
+            Write-Info "Available versions:"
             git tag -l --sort=-version:refname | Select-Object -First 10
             return
         }
 
         $cur = Get-CurrentVersion
-        Write-Info "当前: $cur -> 目标: $targetVersion"
-        if ($cur -eq $targetVersion) { Write-Warn "已是目标版本"; return }
+        Write-Info "Current: $cur => Target: $targetVersion"
+        if ($cur -eq $targetVersion) { Write-Warn "Already at target version"; return }
 
         Invoke-Backup
-        Write-Step "停止服务"
+        Write-Step "Stopping service..."
         pm2 stop esports-club 2>$null
 
-        Write-Step "切换版本"
+        Write-Step "Switching to $targetVersion..."
         git fetch --tags
         git checkout $targetVersion --force
 
         Invoke-InstallDeps
         Invoke-Build
 
-        Write-Step "重启服务"
+        Write-Step "Restarting service..."
         pm2 restart esports-club 2>$null
         Save-CurrentVersion $targetVersion
-        Write-OK "部署完成: $targetVersion"
+        Write-OK "Deployed: $targetVersion"
         Write-Log "Deployed: $targetVersion"
 
         Start-Sleep -Seconds 3
         Invoke-HealthCheck
     }
-    catch { Write-Err "部署失败: $_" }
+    catch { Write-Err "Deploy failed: $_" }
     finally { Pop-Location }
 }
 
 function Invoke-DeployLatest {
-    if (-not (Test-GitRepo)) { Write-Err "不是 Git 仓库"; return }
+    if (-not (Test-GitRepo)) { Write-Err "Not a Git repository"; return }
     Push-Location $ProjectDir
     try {
         $latest = git tag -l --sort=-version:refname | Select-Object -First 1
-        if (-not $latest) { Write-Err "没有版本标签"; return }
+        if (-not $latest) { Write-Err "No version tags found"; return }
         Invoke-DeployVersion $latest
     }
-    catch { Write-Err "部署失败: $_" }
+    catch { Write-Err "Deploy failed: $_" }
     finally { Pop-Location }
 }
 
 function Invoke-HealthCheck {
-    Write-Step "健康检查"
+    Write-Step "Health check..."
     try {
         $r = Invoke-WebRequest -Uri "http://localhost:3000" -TimeoutSec 10 -UseBasicParsing
         if ($r.StatusCode -eq 200) {
-            Write-OK "服务运行正常"
+            Write-OK "Service is healthy"
             return $true
         }
-        Write-Err "状态异常: $($r.StatusCode)"
+        Write-Err "Unexpected status: $($r.StatusCode)"
         return $false
     }
     catch {
-        Write-Err "服务无响应: $_"
+        Write-Err "Service not responding: $_"
         return $false
     }
 }
 
 function Show-Versions {
-    if (-not (Test-GitRepo)) { Write-Warn "非 Git 仓库"; return }
+    if (-not (Test-GitRepo)) { Write-Warn "Not a Git repository"; return }
     Push-Location $ProjectDir
     try {
-        Write-Host ""; Write-Host "可用版本:" -ForegroundColor Cyan
+        Write-Host ""; Write-Host "Available versions:" -ForegroundColor Cyan
         git tag -l --sort=-version:refname | Select-Object -First 10 | ForEach-Object {
             $d = git log -1 --format="%ci" $_ 2>$null
             Write-Host "  $_  ($d)"
@@ -250,8 +250,8 @@ function Show-Versions {
 }
 
 function Show-Backups {
-    if (-not (Test-Path $BackupDir)) { Write-Warn "无备份文件"; return }
-    Write-Host ""; Write-Host "备份文件:" -ForegroundColor Cyan
+    if (-not (Test-Path $BackupDir)) { Write-Warn "No backups found"; return }
+    Write-Host ""; Write-Host "Backup files:" -ForegroundColor Cyan
     Get-ChildItem $BackupDir -Filter "backup_*_data.db" |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 10 |
@@ -263,25 +263,25 @@ function Show-Backups {
 
 function Show-Help {
     Write-Host ""
-    Write-Host "无尽电竞业务系统 - 部署脚本" -ForegroundColor Yellow
+    Write-Host "Endless Esports Club - Deployment Script" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "用法:" -ForegroundColor Cyan
-    Write-Host "  .\deploy.ps1                         查看帮助和状态"
-    Write-Host "  .\deploy.ps1 -Version v1.1.0         部署到指定版本"
-    Write-Host "  .\deploy.ps1 -Latest                 部署最新版本"
-    Write-Host "  .\deploy.ps1 -Action backup          仅备份"
-    Write-Host "  .\deploy.ps1 -Action rollback        回滚到上一版本"
-    Write-Host "  .\deploy.ps1 -Action restore -BackupFile <path>  恢复备份"
-    Write-Host "  .\deploy.ps1 -Action list-versions   列出可用版本"
-    Write-Host "  .\deploy.ps1 -Action list-backups    列出备份"
-    Write-Host "  .\deploy.ps1 -Action health          健康检查"
+    Write-Host "Usage:" -ForegroundColor Cyan
+    Write-Host "  .\deploy.ps1                         Show help and status"
+    Write-Host "  .\deploy.ps1 -Version v1.1.0         Deploy to specific version"
+    Write-Host "  .\deploy.ps1 -Latest                 Deploy latest version"
+    Write-Host "  .\deploy.ps1 -Action backup          Backup only"
+    Write-Host "  .\deploy.ps1 -Action rollback        Rollback to previous version"
+    Write-Host "  .\deploy.ps1 -Action restore -BackupFile <path>  Restore backup"
+    Write-Host "  .\deploy.ps1 -Action list-versions   List available versions"
+    Write-Host "  .\deploy.ps1 -Action list-backups    List backup files"
+    Write-Host "  .\deploy.ps1 -Action health          Health check"
     Write-Host ""
 }
 
-# === 主逻辑 ===
+# === Main ===
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  无尽电竞业务系统 - 部署工具" -ForegroundColor Cyan
+Write-Host "  Endless Esports Club - Deploy Tool" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 if ($Action) {
@@ -293,7 +293,7 @@ if ($Action) {
         "list-backups"  { Show-Backups }
         "health"        { Invoke-HealthCheck }
         default {
-            Write-Err "未知操作: $Action"
+            Write-Err "Unknown action: $Action"
             Show-Help
         }
     }
@@ -311,4 +311,4 @@ else {
 }
 
 Write-Host ""
-Write-OK "操作完成"
+Write-OK "Done"
