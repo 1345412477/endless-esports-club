@@ -1,21 +1,42 @@
+# 依赖
 node_modules/
-client/dist/
 client/node_modules/
 
-data.db
-backups/
-logs/
+# 构建产物
+client/dist/
 
+# 数据库
+data.db
+*.db-journal
+
+# 备份
+backups/
+
+# 日志
+logs/
 *.log
-*.local
+
+# 环境配置
 .env
 .env.local
 .env.*.local
+*.local
 
+# 部署临时文件
+.current-version
+deploy.log
+
+# 系统文件
 .DS_Store
 Thumbs.db
+desktop.ini
 
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+
+# 花生壳客户端（如果放在项目目录）
+*.exe
