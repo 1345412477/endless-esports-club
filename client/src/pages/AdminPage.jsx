@@ -1841,6 +1841,8 @@ function SettlementTab() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [workerPage, setWorkerPage] = useState(1)
   const [csPage, setCsPage] = useState(1)
+  const [workerSearch, setWorkerSearch] = useState('')
+  const [csSearch, setCsSearch] = useState('')
   const [editingCell, setEditingCell] = useState(null) // { personName, personType, field, recordId }
   const [editValue, setEditValue] = useState('')
   const pageSize = 5
@@ -2001,6 +2003,24 @@ function SettlementTab() {
 
         {workerList.length > 0 ? (
           <>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '10px', fontSize: '0.9rem', color: 'var(--muted)', pointerEvents: 'none' }}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="搜索员工姓名..."
+                  value={workerSearch}
+                  onChange={(e) => { setWorkerSearch(e.target.value); setWorkerPage(1) }}
+                  style={{ padding: '8px 12px 8px 34px', border: '2px solid var(--border)', borderRadius: '8px', fontSize: '0.9rem', width: '220px', outline: 'none', background: '#fff', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+              </div>
+              {workerSearch && (
+                <button onClick={() => setWorkerSearch('')} style={{ padding: '6px 14px', fontSize: '0.85rem', cursor: 'pointer', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '500' }}>清除</button>
+              )}
+              <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>共 {workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length} 条</span>
+            </div>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -2015,7 +2035,7 @@ function SettlementTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {workerList.slice((workerPage - 1) * pageSize, workerPage * pageSize).map(w => {
+                  {workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).slice((workerPage - 1) * pageSize, workerPage * pageSize).map(w => {
                   const key = 'worker_' + w.name
                   const isEditingSettled = editingCell?.personName === w.name && editingCell?.personType === 'worker' && editingCell?.field === 'settled_total'
                   const isEditingUnsettled = editingCell?.personName === w.name && editingCell?.personType === 'worker' && editingCell?.field === 'unsettled'
@@ -2071,7 +2091,7 @@ function SettlementTab() {
                                 setEditingCell(null)
                                 setEditValue('')
                               }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '3px' }}
+                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
                             >✓</button>
                           </div>
                         ) : (
@@ -2125,7 +2145,7 @@ function SettlementTab() {
                                 setEditingCell(null)
                                 setEditValue('')
                               }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '3px' }}
+                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
                             >✓</button>
                           </div>
                         ) : (
@@ -2173,7 +2193,7 @@ function SettlementTab() {
                                   setEditingCell(null)
                                   setEditValue('')
                                 }}
-                                style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '3px' }}
+                                style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
                               >✓</button>
                             </div>
                           ) : (
@@ -2259,7 +2279,7 @@ function SettlementTab() {
               </tbody>
             </table>
           </div>
-          {workerList.length > pageSize && (
+          {workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length > pageSize && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px', alignItems: 'center' }}>
               <button
                 className="btn btn-outline btn-sm"
@@ -2269,12 +2289,12 @@ function SettlementTab() {
                 上一页
               </button>
               <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
-                第 {workerPage} / {Math.ceil(workerList.length / pageSize)} 页，共 {workerList.length} 条
+                第 {workerPage} / {Math.ceil(workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length / pageSize)} 页，共 {workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length} 条
               </span>
               <button
                 className="btn btn-outline btn-sm"
-                disabled={workerPage >= Math.ceil(workerList.length / pageSize)}
-                onClick={() => setWorkerPage(p => Math.min(Math.ceil(workerList.length / pageSize), p + 1))}
+                disabled={workerPage >= Math.ceil(workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length / pageSize)}
+                onClick={() => setWorkerPage(p => Math.min(Math.ceil(workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).length / pageSize), p + 1))}
               >
                 下一页
               </button>
@@ -2294,6 +2314,24 @@ function SettlementTab() {
 
         {csList.length > 0 ? (
           <>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '10px', fontSize: '0.9rem', color: 'var(--muted)', pointerEvents: 'none' }}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="搜索客服姓名..."
+                  value={csSearch}
+                  onChange={(e) => { setCsSearch(e.target.value); setCsPage(1) }}
+                  style={{ padding: '8px 12px 8px 34px', border: '2px solid var(--border)', borderRadius: '8px', fontSize: '0.9rem', width: '220px', outline: 'none', background: '#fff', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+              </div>
+              {csSearch && (
+                <button onClick={() => setCsSearch('')} style={{ padding: '6px 14px', fontSize: '0.85rem', cursor: 'pointer', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '500' }}>清除</button>
+              )}
+              <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>共 {csList.filter(c => !csSearch || c.name.includes(csSearch)).length} 条</span>
+            </div>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -2307,7 +2345,7 @@ function SettlementTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {csList.slice((csPage - 1) * pageSize, csPage * pageSize).map(c => {
+                  {csList.filter(c => !csSearch || c.name.includes(csSearch)).slice((csPage - 1) * pageSize, csPage * pageSize).map(c => {
                   const key = 'cs_' + c.name
                   const isEditingCsSettled = editingCell?.personName === c.name && editingCell?.personType === 'cs' && editingCell?.field === 'settled_total'
                   return (
@@ -2361,7 +2399,7 @@ function SettlementTab() {
                                 setEditingCell(null)
                                 setEditValue('')
                               }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '3px' }}
+                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
                             >✓</button>
                           </div>
                         ) : (
@@ -2417,7 +2455,7 @@ function SettlementTab() {
               </tbody>
             </table>
           </div>
-          {csList.length > pageSize && (
+          {csList.filter(c => !csSearch || c.name.includes(csSearch)).length > pageSize && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px', alignItems: 'center' }}>
               <button
                 className="btn btn-outline btn-sm"
@@ -2427,12 +2465,12 @@ function SettlementTab() {
                 上一页
               </button>
               <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
-                第 {csPage} / {Math.ceil(csList.length / pageSize)} 页，共 {csList.length} 条
+                第 {csPage} / {Math.ceil(csList.filter(c => !csSearch || c.name.includes(csSearch)).length / pageSize)} 页，共 {csList.filter(c => !csSearch || c.name.includes(csSearch)).length} 条
               </span>
               <button
                 className="btn btn-outline btn-sm"
-                disabled={csPage >= Math.ceil(csList.length / pageSize)}
-                onClick={() => setCsPage(p => Math.min(Math.ceil(csList.length / pageSize), p + 1))}
+                disabled={csPage >= Math.ceil(csList.filter(c => !csSearch || c.name.includes(csSearch)).length / pageSize)}
+                onClick={() => setCsPage(p => Math.min(Math.ceil(csList.filter(c => !csSearch || c.name.includes(csSearch)).length / pageSize), p + 1))}
               >
                 下一页
               </button>

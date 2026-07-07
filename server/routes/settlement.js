@@ -279,7 +279,6 @@ router.put('/worker-unsettled', requireRole('admin'), (req, res) => {
 
   db.transaction(() => {
     db.prepare('UPDATE config_workers SET manual_unsettled = ? WHERE name = ?').run(unsettledAmt, worker_name);
-    recalculateWorkerDeposit(db, worker_name);
   })();
 
   logAction('修改未结算', '工资结算', `员工：${worker_name}，目标未结算：¥${unsettledAmt.toFixed(2)}`, req.user.username);
@@ -308,7 +307,6 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
 
   db.transaction(() => {
     db.prepare('UPDATE config_workers SET deposit = ? WHERE name = ?').run(depositAmt, worker_name);
-    recalculateWorkerDeposit(db, worker_name);
   })();
 
   logAction('修改押金', '工资结算', `员工：${worker_name}，原押金：¥${oldDeposit.toFixed(2)}，新押金：¥${depositAmt.toFixed(2)}`, req.user.username);
