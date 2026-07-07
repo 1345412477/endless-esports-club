@@ -8,8 +8,22 @@ const router = express.Router();
 
 const VALID_STATUSES = ['接单中', '已结单', '存单', '退单'];
 
+function generateSerialNo(db) {
+  const today = new Date();
+  const dateKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const prefix = `WJ${dateKey}`;
+
+  const seqRow = db.prepare('SELECT next_seq FROM order_serial_seq WHERE date_key = ?').get(dateKey);
+  const seq = seqRow ? seqRow.next_seq : 1;
+
+  db.prepare('INSERT OR REPLACE INTO order_serial_seq (date_key, next_seq) VALUES (?, ?)').run(dateKey, seq + 1);
+
+  return `${prefix}${String(seq).padStart(2, '0')}`;
+}
+
 function orderTag(order) {
   const parts = [`订单#${order.id}`];
+  if (order.serial_no) parts.push(`流水号：${order.serial_no}`);
   if (order.order_type) parts.push(`类型：${order.order_type}`);
   if (order.customer_name) parts.push(`客户：${order.customer_name}`);
   return parts.join('，');
@@ -67,8 +81,8 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
   const workerCount = workers.length;
 
   const insertOrder = db.prepare(`
-    INSERT INTO orders (cs_name, order_type, customer_name, remark, price, status, cs_commission_rate, cs_commission_amount)
-    VALUES (?, ?, ?, ?, ?, '接单中', ?, ?)
+    INSERT INTO orders (serial_no, cs_name, order_type, customer_name, remark, price, status, cs_commission_rate, cs_commission_amount)
+    VALUES (?, ?, ?, ?, ?, ?, '接单中', ?, ?)
   `);
   const insertWorker = db.prepare(`
     INSERT INTO order_workers (order_id, worker_name, deduction_rate, deduction_amount)
@@ -76,20 +90,21 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
   `);
 
   const txn = db.transaction(() => {
-    const result = insertOrder.run(cs_name, order_type, customer_name || '', remark || '', price, csCommissionRate, csCommissionAmount);
+    const serialNo = generateSerialNo(db);
+    const result = insertOrder.run(serialNo, cs_name, order_type, customer_name || '', remark || '', price, csCommissionRate, csCommissionAmount);
     const orderId = result.lastInsertRowid;
 
     for (const w of workers) {
       const deductionAmount = (price / workerCount) * w._deduction_rate;
       insertWorker.run(orderId, w.name, w._deduction_rate, deductionAmount);
     }
-    return orderId;
+    return { orderId, serialNo };
   });
 
-  const orderId = txn();
+  const { orderId, serialNo } = txn();
   const customerPart = customer_name ? `，客户：${customer_name}` : '';
-  logAction('创建订单', '订单管理', `订单#${orderId}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}`, req.user.username);
-  res.json({ code: 0, data: { id: orderId }, message: 'ok' });
+  logAction('创建订单', '订单管理', `订单#${orderId}，流水号：${serialNo}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}`, req.user.username);
+  res.json({ code: 0, data: { id: orderId, serial_no: serialNo }, message: 'ok' });
 });
 
 router.get('/', requireRole('cs', 'admin'), (req, res) => {

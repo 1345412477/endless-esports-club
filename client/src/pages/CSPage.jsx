@@ -568,6 +568,7 @@ export default function CSPage() {
                 <thead>
                   <tr>
                     <th>时间</th>
+                    <th>流水号</th>
                     <th>客服</th>
                     <th>单子类型</th>
                     <th>总价</th>
@@ -583,6 +584,7 @@ export default function CSPage() {
                   {orders.map(o => (
                     <tr key={o.id}>
                       <td>{formatDate(o.created_at)}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--accent)' }}>{o.serial_no || '-'}</td>
                       <td>{o.cs_name}</td>
                       <td>{o.order_type || '-'}</td>
                       <td>¥{formatMoney(o.price)}</td>

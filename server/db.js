@@ -108,6 +108,7 @@ class DbWrapper {
     this.sqlDb.run(`
       CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        serial_no TEXT DEFAULT '',
         cs_name TEXT NOT NULL,
         order_type TEXT NOT NULL,
         customer_name TEXT DEFAULT '',
@@ -118,6 +119,12 @@ class DbWrapper {
         cs_commission_amount REAL NOT NULL,
         created_at TEXT DEFAULT (datetime('now','localtime')),
         updated_at TEXT DEFAULT (datetime('now','localtime'))
+      )
+    `);
+    this.sqlDb.run(`
+      CREATE TABLE IF NOT EXISTS order_serial_seq (
+        date_key TEXT PRIMARY KEY,
+        next_seq INTEGER DEFAULT 1
       )
     `);
     this.sqlDb.run(`

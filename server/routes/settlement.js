@@ -174,4 +174,128 @@ router.get('/history', requireRole('admin'), (req, res) => {
   res.json({ code: 0, data: records, message: 'ok' });
 });
 
+// 直接修改结算记录金额（用于数据录入）
+router.put('/record/:id', requireRole('admin'), (req, res) => {
+  const { id } = req.params;
+  const { settled_amount } = req.body;
+  
+  if (settled_amount === undefined || settled_amount === null) {
+    return res.status(400).json({ code: 1, data: null, message: '缺少结算金额' });
+  }
+  
+  const settledAmt = round2(settled_amount);
+  if (settledAmt < 0) {
+    return res.status(400).json({ code: 1, data: null, message: '结算金额不能为负数' });
+  }
+  
+  const db = getDb();
+  const record = db.prepare('SELECT * FROM settlements WHERE id = ?').get(id);
+  
+  if (!record) {
+    return res.status(404).json({ code: 1, data: null, message: '结算记录不存在' });
+  }
+  
+  if (record.reversed === 1) {
+    return res.status(400).json({ code: 1, data: null, message: '已撤销的记录无法修改' });
+  }
+  
+  if (record.person_type === 'deposit_refund') {
+    return res.status(400).json({ code: 1, data: null, message: '押金退还记录不可修改' });
+  }
+  
+  const oldAmount = record.settled_amount;
+  
+  const txn = db.transaction(() => {
+    db.prepare('UPDATE settlements SET settled_amount = ? WHERE id = ?').run(settledAmt, id);
+    
+    if (record.person_type === 'worker') {
+      recalculateWorkerDeposit(db, record.person_name);
+    }
+  });
+  
+  try {
+    txn();
+    const typeLabel = record.person_type === 'worker' ? '员工' : '客服';
+    logAction('修改结算记录', '工资结算', `${typeLabel}：${record.person_name}，原金额：¥${oldAmount.toFixed(2)}，新金额：¥${settledAmt.toFixed(2)}`, req.user.username);
+    
+    res.json({ code: 0, data: null, message: 'ok' });
+  } catch (e) {
+    res.status(400).json({ code: 1, data: null, message: e.message });
+  }
+});
+
+// 直接修改员工押金（数据录入用）
+router.put('/worker-deposit', requireRole('admin'), (req, res) => {
+  const { worker_name, deposit } = req.body;
+  if (!worker_name || deposit === undefined) {
+    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
+  }
+  const depositAmt = round2(deposit);
+  if (depositAmt < 0) {
+    return res.status(400).json({ code: 1, data: null, message: '押金不能为负数' });
+  }
+
+  const db = getDb();
+  const worker = db.prepare('SELECT * FROM config_workers WHERE name = ?').get(worker_name);
+  if (!worker) {
+    return res.status(404).json({ code: 1, data: null, message: '员工不存在' });
+  }
+
+  const oldDeposit = round2(worker.deposit || 0);
+
+  db.transaction(() => {
+    db.prepare('UPDATE config_workers SET deposit = ? WHERE name = ?').run(depositAmt, worker_name);
+  })();
+
+  logAction('修改押金', '工资结算', `员工：${worker_name}，原押金：¥${oldDeposit.toFixed(2)}，新押金：¥${depositAmt.toFixed(2)}`, req.user.username);
+  res.json({ code: 0, data: null, message: 'ok' });
+});
+
+// 直接修改员工/客服已结算总额（数据录入用，通过调整记录实现）
+router.put('/adjust-settled', requireRole('admin'), (req, res) => {
+  const { person_name, person_type, target_settled } = req.body;
+  if (!person_name || !person_type || target_settled === undefined) {
+    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
+  }
+  if (!['worker', 'cs'].includes(person_type)) {
+    return res.status(400).json({ code: 1, data: null, message: '人员类型无效' });
+  }
+  const targetSettled = round2(target_settled);
+  if (targetSettled < 0) {
+    return res.status(400).json({ code: 1, data: null, message: '已结算金额不能为负数' });
+  }
+
+  const db = getDb();
+
+  // 查询非调整记录的已结算总额
+  const normalRow = db.prepare(
+    "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0 AND remark != '数据录入调整'"
+  ).get(person_name, person_type);
+  const normalTotal = round2(normalRow.total);
+
+  // 查找已有的调整记录
+  const existingAdj = db.prepare(
+    "SELECT id FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0 AND remark = '数据录入调整'"
+  ).get(person_name, person_type);
+
+  const adjAmount = round2(Math.max(0, targetSettled - normalTotal));
+
+  db.transaction(() => {
+    if (existingAdj) {
+      db.prepare('UPDATE settlements SET settled_amount = ? WHERE id = ?').run(adjAmount, existingAdj.id);
+    } else if (adjAmount > 0) {
+      db.prepare(
+        'INSERT INTO settlements (person_name, person_type, settled_amount, settled_by, remark) VALUES (?, ?, ?, ?, ?)'
+      ).run(person_name, person_type, adjAmount, req.user.username, '数据录入调整');
+    }
+
+    if (person_type === 'worker') {
+      recalculateWorkerDeposit(db, person_name);
+    }
+  })();
+
+  logAction('调整已结算', '工资结算', `${person_type === 'worker' ? '员工' : '客服'}：${person_name}，目标已结算：¥${targetSettled.toFixed(2)}`, req.user.username);
+  res.json({ code: 0, data: null, message: 'ok' });
+});
+
 module.exports = router;
