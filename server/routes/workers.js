@@ -60,6 +60,7 @@ router.get('/worker', (req, res) => {
 
   const deposit = worker.deposit || 0;
   const depositTarget = worker.deposit_target || 0;
+  const manualUnsettled = worker.manual_unsettled || 0;
 
   res.json({
     code: 0,
@@ -68,9 +69,9 @@ router.get('/worker', (req, res) => {
       worker: { name, default_deduction_rate: worker.default_deduction_rate, rating: worker.rating, status: worker.status, deposit: deposit, deposit_target: depositTarget },
       summary: {
         completed_count: agg.completed_count,
-        total_salary: agg.total_salary,
+        total_salary: agg.total_salary + manualUnsettled + deposit,
         settled_total: agg.settled_total,
-        unsettled: Math.max(0, agg.total_salary - agg.settled_total - deposit),
+        unsettled: Math.max(0, agg.total_salary - agg.settled_total - deposit) + manualUnsettled,
         deposit: deposit,
         deposit_target: depositTarget,
         month_count: aggMonth.month_count,

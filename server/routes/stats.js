@@ -226,7 +226,7 @@ router.get('/dashboard', requireRole('admin'), (req, res) => {
 router.get('/settlement-stats', requireRole('admin'), (req, res) => {
   const db = getDb();
 
-  const workers = db.prepare('SELECT name, deposit, deposit_target FROM config_workers').all();
+  const workers = db.prepare('SELECT name, deposit, deposit_target, manual_unsettled FROM config_workers').all();
   const csList = db.prepare('SELECT name FROM config_cs').all();
 
   let workerUnsettled = 0;
@@ -249,7 +249,8 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
     const settled = round2(setRow.total || 0);
 
     const deposit = round2(w.deposit || 0);
-    workerUnsettled += round2(Math.max(0, totalSalary - settled - deposit));
+    const manualUnsettled = round2(w.manual_unsettled || 0);
+    workerUnsettled += round2(Math.max(0, totalSalary - settled - deposit) + manualUnsettled);
   }
 
   let csUnsettled = 0;
