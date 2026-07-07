@@ -10,7 +10,10 @@ const VALID_STATUSES = ['接单中', '已结单', '存单', '退单'];
 
 function generateSerialNo(db) {
   const today = new Date();
-  const dateKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1; // no padding
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateKey = `${year}${month}${day}`;
   const prefix = `WJ${dateKey}`;
 
   const seqRow = db.prepare('SELECT next_seq FROM order_serial_seq WHERE date_key = ?').get(dateKey);
@@ -18,7 +21,7 @@ function generateSerialNo(db) {
 
   db.prepare('INSERT OR REPLACE INTO order_serial_seq (date_key, next_seq) VALUES (?, ?)').run(dateKey, seq + 1);
 
-  return `${prefix}${String(seq).padStart(2, '0')}`;
+  return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
 function orderTag(order) {

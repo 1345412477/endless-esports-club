@@ -2,7 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
-const { recalculateWorkerDeposit, round2 } = require('../utils/deposit');
+const { recalculateWorkerDeposit, getWorkerSettledTotal, getWorkerTotalSalary, round2 } = require('../utils/deposit');
 
 const router = express.Router();
 
@@ -26,13 +26,7 @@ router.post('/', requireRole('admin'), (req, res) => {
   if (person_type === 'worker') {
     const worker = db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(person_name);
     currentDeposit = worker ? round2(worker.deposit || 0) : 0;
-    const row = db.prepare(`
-      SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
-      FROM order_workers ow
-      JOIN orders o ON ow.order_id = o.id
-      WHERE ow.worker_name = ? AND o.status = '已结单'
-    `).get(person_name);
-    totalSalary = round2(row.total);
+    totalSalary = getWorkerTotalSalary(db, person_name);
   } else {
     const row = db.prepare(
       "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
@@ -224,7 +218,76 @@ router.put('/record/:id', requireRole('admin'), (req, res) => {
   }
 });
 
+// 直接设置员工/客服的已结算总额（数据录入用）
+// 编辑已结算时，创建结算记录，未结算和累计工资自动更新
+router.put('/adjust-settled', requireRole('admin'), (req, res) => {
+  const { person_name, person_type, target_settled } = req.body;
+  if (!person_name || !person_type || target_settled === undefined) {
+    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
+  }
+  const targetSettled = round2(target_settled);
+  if (targetSettled < 0) {
+    return res.status(400).json({ code: 1, data: null, message: '已结算金额不能为负数' });
+  }
+
+  const db = getDb();
+  const currentSettled = getWorkerSettledTotal(db, person_name);
+  const diff = round2(targetSettled - currentSettled);
+
+  if (diff === 0) {
+    return res.json({ code: 0, data: null, message: 'ok' });
+  }
+
+  db.transaction(() => {
+    if (diff > 0) {
+      db.prepare(
+        'INSERT INTO settlements (person_name, person_type, settled_amount, settled_by, remark) VALUES (?, ?, ?, ?, ?)'
+      ).run(person_name, person_type, diff, req.user.username, '数据录入调整');
+    } else {
+      db.prepare(
+        'INSERT INTO settlements (person_name, person_type, settled_amount, settled_by, remark) VALUES (?, ?, ?, ?, ?)'
+      ).run(person_name, person_type, diff, req.user.username, '数据录入调整（减少）');
+    }
+
+    if (person_type === 'worker') {
+      recalculateWorkerDeposit(db, person_name);
+    }
+  })();
+
+  const typeLabel = person_type === 'worker' ? '员工' : '客服';
+  logAction('修改已结算', '工资结算', `${typeLabel}：${person_name}，目标已结算：¥${targetSettled.toFixed(2)}`, req.user.username);
+  res.json({ code: 0, data: null, message: 'ok' });
+});
+
+// 直接修改员工未结算金额（数据录入用）
+// 未结算独立存储在 manual_unsettled 字段
+router.put('/worker-unsettled', requireRole('admin'), (req, res) => {
+  const { worker_name, unsettled } = req.body;
+  if (!worker_name || unsettled === undefined) {
+    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
+  }
+  const unsettledAmt = round2(unsettled);
+  if (unsettledAmt < 0) {
+    return res.status(400).json({ code: 1, data: null, message: '未结算金额不能为负数' });
+  }
+
+  const db = getDb();
+  const worker = db.prepare('SELECT deposit, manual_unsettled FROM config_workers WHERE name = ?').get(worker_name);
+  if (!worker) {
+    return res.status(404).json({ code: 1, data: null, message: '员工不存在' });
+  }
+
+  db.transaction(() => {
+    db.prepare('UPDATE config_workers SET manual_unsettled = ? WHERE name = ?').run(unsettledAmt, worker_name);
+    recalculateWorkerDeposit(db, worker_name);
+  })();
+
+  logAction('修改未结算', '工资结算', `员工：${worker_name}，目标未结算：¥${unsettledAmt.toFixed(2)}`, req.user.username);
+  res.json({ code: 0, data: null, message: 'ok' });
+});
+
 // 直接修改员工押金（数据录入用）
+// 编辑押金时，未结算和累计工资自动更新
 router.put('/worker-deposit', requireRole('admin'), (req, res) => {
   const { worker_name, deposit } = req.body;
   if (!worker_name || deposit === undefined) {
@@ -236,7 +299,7 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
   }
 
   const db = getDb();
-  const worker = db.prepare('SELECT * FROM config_workers WHERE name = ?').get(worker_name);
+  const worker = db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(worker_name);
   if (!worker) {
     return res.status(404).json({ code: 1, data: null, message: '员工不存在' });
   }
@@ -245,56 +308,10 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
 
   db.transaction(() => {
     db.prepare('UPDATE config_workers SET deposit = ? WHERE name = ?').run(depositAmt, worker_name);
+    recalculateWorkerDeposit(db, worker_name);
   })();
 
   logAction('修改押金', '工资结算', `员工：${worker_name}，原押金：¥${oldDeposit.toFixed(2)}，新押金：¥${depositAmt.toFixed(2)}`, req.user.username);
-  res.json({ code: 0, data: null, message: 'ok' });
-});
-
-// 直接修改员工/客服已结算总额（数据录入用，通过调整记录实现）
-router.put('/adjust-settled', requireRole('admin'), (req, res) => {
-  const { person_name, person_type, target_settled } = req.body;
-  if (!person_name || !person_type || target_settled === undefined) {
-    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
-  }
-  if (!['worker', 'cs'].includes(person_type)) {
-    return res.status(400).json({ code: 1, data: null, message: '人员类型无效' });
-  }
-  const targetSettled = round2(target_settled);
-  if (targetSettled < 0) {
-    return res.status(400).json({ code: 1, data: null, message: '已结算金额不能为负数' });
-  }
-
-  const db = getDb();
-
-  // 查询非调整记录的已结算总额
-  const normalRow = db.prepare(
-    "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0 AND remark != '数据录入调整'"
-  ).get(person_name, person_type);
-  const normalTotal = round2(normalRow.total);
-
-  // 查找已有的调整记录
-  const existingAdj = db.prepare(
-    "SELECT id FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0 AND remark = '数据录入调整'"
-  ).get(person_name, person_type);
-
-  const adjAmount = round2(Math.max(0, targetSettled - normalTotal));
-
-  db.transaction(() => {
-    if (existingAdj) {
-      db.prepare('UPDATE settlements SET settled_amount = ? WHERE id = ?').run(adjAmount, existingAdj.id);
-    } else if (adjAmount > 0) {
-      db.prepare(
-        'INSERT INTO settlements (person_name, person_type, settled_amount, settled_by, remark) VALUES (?, ?, ?, ?, ?)'
-      ).run(person_name, person_type, adjAmount, req.user.username, '数据录入调整');
-    }
-
-    if (person_type === 'worker') {
-      recalculateWorkerDeposit(db, person_name);
-    }
-  })();
-
-  logAction('调整已结算', '工资结算', `${person_type === 'worker' ? '员工' : '客服'}：${person_name}，目标已结算：¥${targetSettled.toFixed(2)}`, req.user.username);
   res.json({ code: 0, data: null, message: 'ok' });
 });
 

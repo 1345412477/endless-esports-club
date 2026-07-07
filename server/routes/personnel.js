@@ -6,21 +6,19 @@ const router = express.Router();
 router.get('/workers/list', (req, res) => {
   const db = getDb();
   const workers = db.prepare(`
-    SELECT cw.id, cw.name, cw.default_deduction_rate, cw.rating, cw.status, cw.deposit, cw.deposit_target,
-      COALESCE((
-        SELECT SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL))
-        FROM order_workers ow
-        JOIN orders o ON ow.order_id = o.id
-        WHERE ow.worker_name = cw.name AND o.status = '已结单'
-      ), 0) as total_salary,
+    SELECT cw.id, cw.name, cw.default_deduction_rate, cw.rating, cw.status, cw.deposit, cw.deposit_target, cw.manual_unsettled,
       COALESCE((SELECT SUM(s.settled_amount) FROM settlements s WHERE s.person_name = cw.name AND s.person_type = 'worker' AND s.reversed = 0), 0) as settled_total
     FROM config_workers cw
     ORDER BY cw.name
   `).all();
 
   for (const w of workers) {
-    const depositAmt = w.deposit != null ? w.deposit : 0;
-    w.unsettled = Math.max(0, w.total_salary - w.settled_total - depositAmt);
+    const settled = w.settled_total || 0;
+    const unsettled = w.manual_unsettled || 0;
+    const deposit = w.deposit || 0;
+    // 累计工资 = 已结算 + 未结算 + 押金
+    w.total_salary = settled + unsettled + deposit;
+    w.unsettled = unsettled;
   }
   res.json({ code: 0, data: workers, message: 'ok' });
 });

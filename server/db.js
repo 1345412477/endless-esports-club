@@ -195,6 +195,23 @@ class DbWrapper {
     try {
       this.sqlDb.run("ALTER TABLE config_cs ADD COLUMN password TEXT DEFAULT ''");
     } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE config_workers ADD COLUMN manual_adjustment REAL DEFAULT 0");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE config_workers ADD COLUMN manual_unsettled REAL DEFAULT 0");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE orders ADD COLUMN serial_no TEXT DEFAULT ''");
+    } catch (_) {}
+    try {
+      this.sqlDb.run(`
+        CREATE TABLE IF NOT EXISTS order_serial_seq (
+          date_key TEXT PRIMARY KEY,
+          next_seq INTEGER DEFAULT 1
+        )
+      `);
+    } catch (_) {}
   }
 
   prepare(sql) {

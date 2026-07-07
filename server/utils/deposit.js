@@ -4,14 +4,20 @@ function round2(v) {
   return Math.round((Number(v) + Number.EPSILON) * 100) / 100;
 }
 
+// 累计工资 = 已结算 + 未结算 + 押金
 function getWorkerTotalSalary(db, workerName) {
-  const row = db.prepare(`
-    SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
-    FROM order_workers ow
-    JOIN orders o ON ow.order_id = o.id
-    WHERE ow.worker_name = ? AND o.status = '已结单'
-  `).get(workerName);
-  return round2(row.total);
+  const settledRow = db.prepare(
+    "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0"
+  ).get(workerName);
+  const settledTotal = round2(settledRow.total);
+
+  const worker = db.prepare('SELECT deposit, manual_unsettled FROM config_workers WHERE name = ?').get(workerName);
+  if (!worker) return settledTotal;
+
+  const deposit = round2(worker.deposit || 0);
+  const unsettled = round2(worker.manual_unsettled || 0);
+
+  return round2(settledTotal + unsettled + deposit);
 }
 
 function getWorkerSettledTotal(db, workerName) {
