@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
+import { toast } from '../components/Toast'
+import { confirm } from '../components/ConfirmDialog'
 
 const PAGE_SIZE = 5
 const VALID_STATUSES = ['接单中', '已结单', '存单', '退单']
@@ -159,12 +161,12 @@ export default function CSPage() {
         remark: remark.trim(),
         workers: validatedWorkers,
       })
-      setFormSuccess('订单创建成功')
+      toast('订单创建成功', 'success')
       resetForm()
       setPage(1)
       await loadOrders()
     } catch (err) {
-      setFormError(err.message)
+      toast(err.message, 'error')
     } finally {
       setFormSubmitting(false)
     }
@@ -173,19 +175,22 @@ export default function CSPage() {
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       await api.put(`/orders/${orderId}/status`, { status: newStatus })
+      toast('订单状态已更新', 'success')
       await loadOrders()
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
     }
   }
 
   const handleDelete = async (orderId) => {
-    if (!window.confirm('确定删除该订单？')) return
+    const confirmed = await confirm('确定删除该订单？')
+    if (!confirmed) return
     try {
       await api.del('/orders/' + orderId)
+      toast('订单已删除', 'success')
       await loadOrders()
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
     }
   }
 
@@ -267,9 +272,10 @@ export default function CSPage() {
         workers: validatedWorkers,
       })
       closeEditModal()
+      toast('订单已更新', 'success')
       await loadOrders()
     } catch (err) {
-      setEditError(err.message)
+      toast(err.message, 'error')
     } finally {
       setEditSubmitting(false)
     }

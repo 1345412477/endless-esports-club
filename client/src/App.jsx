@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import { ToastContainer } from './components/Toast';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import LoginPage from './pages/LoginPage';
 import WorkerPage from './pages/WorkerPage';
 import CSPage from './pages/CSPage';
@@ -15,6 +17,8 @@ function ProtectedRoute({ children, role }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastContainer />
+      <ConfirmDialog />
       <Routes>
         <Route path="/" element={<WorkerPage />} />
         <Route path="/login" element={<LoginPage />} />

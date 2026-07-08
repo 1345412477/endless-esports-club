@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
+import { toast } from '../components/Toast'
+import { confirm } from '../components/ConfirmDialog'
 
 const VALID_STATUSES = ['接单中', '已结单', '存单', '退单']
 
@@ -205,12 +207,14 @@ function DashboardTab() {
   }
 
   const handleDeleteOrder = async (orderId) => {
-    if (!window.confirm('确定删除该订单？')) return
+    const confirmed = await confirm('确定删除该订单？')
+    if (!confirmed) return
     try {
       await api.del('/orders/' + orderId)
+      toast('订单已删除', 'success')
       await loadOrders()
     } catch (err) {
-      setOrdersError(err.message)
+      toast(err.message, 'error')
     }
   }
 
@@ -265,8 +269,9 @@ function DashboardTab() {
       closeCreateModal()
       await loadOrders()
       await loadData()
+      toast('订单创建成功', 'success')
     } catch (err) {
-      setCreateError(err.message)
+      toast(err.message, 'error')
     } finally {
       setCreateSubmitting(false)
     }
@@ -325,8 +330,9 @@ function DashboardTab() {
       })
       closeEditModal()
       await loadOrders()
+      toast('订单已更新', 'success')
     } catch (err) {
-      setEditError(err.message)
+      toast(err.message, 'error')
     } finally {
       setEditSubmitting(false)
     }
@@ -1066,12 +1072,14 @@ function PersonnelTab() {
   }
 
   const handleDeleteCs = async (id) => {
-    if (!window.confirm('确定要删除该客服吗？')) return
+    const confirmed = await confirm('确定要删除该客服吗？')
+    if (!confirmed) return
     try {
       await api.del('/config/cs/' + id)
+      toast('客服已删除', 'success')
       await loadData()
     } catch (err) {
-      setCsError(err.message)
+      toast(err.message, 'error')
     }
   }
 
@@ -1145,12 +1153,14 @@ function PersonnelTab() {
   }
 
   const handleDeleteWorker = async (id) => {
-    if (!window.confirm('确定要删除该员工吗？')) return
+    const confirmed = await confirm('确定要删除该员工吗？')
+    if (!confirmed) return
     try {
       await api.del('/config/workers/' + id)
+      toast('员工已删除', 'success')
       await loadData()
     } catch (err) {
-      setWorkerError(err.message)
+      toast(err.message, 'error')
     }
   }
 
@@ -1905,32 +1915,36 @@ function SettlementTab() {
   const handleDepositRefund = async (workerName) => {
     const worker = workerList.find(w => w.name === workerName)
     if (!worker) return
-    if (!window.confirm(`确定将员工【${workerName}】押金 ¥${worker.deposit.toFixed(2)} 全额退还？退还后将转入待结算工资。`)) return
+    const confirmed = await confirm(`确定将员工【${workerName}】押金 ¥${worker.deposit.toFixed(2)} 全额退还？退还后将转入待结算工资。`)
+    if (!confirmed) return
     setRefundLoading(prev => ({ ...prev, [workerName]: true }))
     try {
       await api.post('/settlement/deposit', { worker_name: workerName })
+      toast('押金已退还', 'success')
       await loadData()
       if (historyPerson && historyPerson.name === workerName && historyPerson.type === 'worker') {
         await showHistory(workerName, 'worker')
       }
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
     } finally {
       setRefundLoading(prev => ({ ...prev, [workerName]: false }))
     }
   }
 
   const handleReverseSettlement = async (recordId) => {
-    if (!window.confirm('确定撤销该结算记录？撤销后将恢复未结算金额。')) return
+    const confirmed = await confirm('确定撤销该结算记录？撤销后将恢复未结算金额。')
+    if (!confirmed) return
     setReverseLoading(prev => ({ ...prev, [recordId]: true }))
     try {
       await api.post(`/settlement/reverse/${recordId}`)
+      toast('结算已撤销', 'success')
       await loadData()
       if (historyPerson) {
         await showHistory(historyPerson.name, historyPerson.type)
       }
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
     } finally {
       setReverseLoading(prev => ({ ...prev, [recordId]: false }))
     }

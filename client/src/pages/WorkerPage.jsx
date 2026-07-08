@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { toast } from '../components/Toast'
+import Logo from '../components/Logo'
+import { Icon } from '../components/Icon'
 
 const PAGE_SIZE = 5
 
@@ -75,6 +78,7 @@ export default function WorkerPage() {
       }
     } catch (err) {
       setError(err.message)
+      toast(err.message, 'error')
     } finally {
       setLoading(false)
     }
@@ -99,71 +103,100 @@ export default function WorkerPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  const getAvatarLetter = () => {
+    if (!name.trim()) return '?'
+    return name.trim().charAt(0).toUpperCase()
+  }
+
   return (
     <div className="container" style={{ paddingTop: '32px' }}>
+      {/* 顶部导航 */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
         <button
           className="btn btn-outline btn-sm"
           onClick={() => navigate('/login')}
         >
-          管理后台登录
+          <Icon.Settings size={16} />
+          管理后台
         </button>
       </div>
-      <h1 className="page-title">人员查询</h1>
 
+      {/* 品牌区域 */}
+      <div className="hero-section">
+        <div className="hero-logo">
+          <Logo size="large" />
+        </div>
+        <h1 className="hero-title">无尽电竞业务系统</h1>
+        <p className="hero-subtitle">WJGame 员工工资查询平台</p>
+        <div className="gradient-line" style={{ maxWidth: '200px', margin: '16px auto' }} />
+        <p className="hero-description">
+          欢迎使用工资查询系统，输入姓名即可查看您的工资详情和订单记录
+        </p>
+      </div>
+
+      {/* 搜索区域 */}
       <form onSubmit={handleSearch} style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', gap: '12px', maxWidth: '520px' }}>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="输入员工 / 客服姓名查询..."
-            style={{
-              flex: 1,
-              fontSize: '1rem',
-              padding: '14px 18px',
-              background: 'var(--bg2)',
-              border: '1px solid var(--rule)',
-              borderRadius: 'var(--radius)',
-              color: 'var(--ink)',
-              outline: 'none',
-              transition: 'border-color 0.2s, box-shadow 0.2s',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'var(--accent)'
-              e.target.style.boxShadow = '0 0 8px rgba(0, 229, 255, 0.2)'
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'var(--rule)'
-              e.target.style.boxShadow = 'none'
-            }}
-          />
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+        <div style={{ display: 'flex', gap: '12px', maxWidth: '600px', margin: '0 auto' }}>
+          <div className="search-wrapper">
+            <Icon.Search size={18} className="search-icon" />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="输入员工 / 客服姓名查询..."
+              style={{
+                width: '100%',
+                fontSize: '1rem',
+                padding: '14px 18px',
+                background: 'var(--bg2)',
+                border: '1px solid var(--rule)',
+                borderRadius: 'var(--radius)',
+                color: 'var(--ink)',
+                outline: 'none',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--accent)'
+                e.target.style.boxShadow = '0 0 8px rgba(26, 115, 232, 0.15)'
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--rule)'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{ minWidth: '100px' }}>
             {loading ? '查询中...' : '查询'}
           </button>
         </div>
+        <p style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.85rem', color: 'var(--muted)' }}>
+          <Icon.Info size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+          提示：请输入完整姓名，如"张三"
+        </p>
       </form>
 
       {loading && (
-        <div style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '16px', textAlign: 'center' }}>
           查询中...
         </div>
       )}
 
       {error && (
-        <div className="error-text" style={{ marginBottom: '16px' }}>
+        <div className="error-text" style={{ marginBottom: '16px', textAlign: 'center' }}>
           {error}
         </div>
       )}
 
       {searched && !loading && type === null && (
         <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+          <Icon.AlertCircle size={48} style={{ color: 'var(--muted)', marginBottom: '16px' }} />
           <p style={{ color: 'var(--muted)', fontSize: '1.1rem' }}>未找到该人员信息</p>
         </div>
       )}
 
       {type && summary && (
         <>
+          {/* 人员信息头部 */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -171,6 +204,9 @@ export default function WorkerPage() {
             marginBottom: '24px',
             flexWrap: 'wrap',
           }}>
+            <div className="avatar-placeholder">
+              {getAvatarLetter()}
+            </div>
             <h2 style={{
               fontFamily: 'var(--font-title)',
               fontSize: '1.4rem',
@@ -186,8 +222,8 @@ export default function WorkerPage() {
               fontSize: '0.78rem',
               fontFamily: 'var(--font-title)',
               background: type === 'worker'
-                ? 'rgba(0, 229, 255, 0.15)'
-                : 'rgba(180, 77, 255, 0.15)',
+                ? 'rgba(26, 115, 232, 0.15)'
+                : 'rgba(124, 58, 237, 0.15)',
               color: type === 'worker' ? 'var(--accent)' : 'var(--accent2)',
             }}>
               {type === 'worker' ? '员工' : '客服'}
@@ -241,6 +277,7 @@ export default function WorkerPage() {
             )}
           </div>
 
+          {/* 统计卡片 */}
           <div className="stats-grid">
             {type === 'worker' ? (
               <>
@@ -302,6 +339,7 @@ export default function WorkerPage() {
             )}
           </div>
 
+          {/* 已完成订单 */}
           {orders.length > 0 && (
             <div className="card" style={{ marginBottom: '24px', padding: '20px' }}>
               <h3 style={{
@@ -365,6 +403,7 @@ export default function WorkerPage() {
             </div>
           )}
 
+          {/* 结算记录 */}
           <div className="card" style={{ padding: '20px' }}>
             <h3 style={{
               fontFamily: 'var(--font-title)',
@@ -424,11 +463,54 @@ export default function WorkerPage() {
         </>
       )}
 
+      {/* 空状态 */}
       {!searched && !loading && (
-        <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-          <p style={{ color: 'var(--muted)', fontSize: '1.1rem' }}>输入姓名查询员工或客服信息</p>
+        <div className="empty-state">
+          <div className="feature-grid">
+            <div className="feature-card">
+              <div className="feature-icon">
+                <Icon.Wallet size={40} strokeWidth={1.5} />
+              </div>
+              <h3>工资查询</h3>
+              <p>查看您的累计工资、已结算和未结算金额</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <Icon.FileText size={40} strokeWidth={1.5} />
+              </div>
+              <h3>订单记录</h3>
+              <p>查看历史完成订单和提成明细</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <Icon.BarChart3 size={40} strokeWidth={1.5} />
+              </div>
+              <h3>结算明细</h3>
+              <p>查看结算记录和押金进度</p>
+            </div>
+          </div>
+          
+          <div className="usage-guide">
+            <h3>
+              <Icon.Info size={20} style={{ marginRight: '8px' }} />
+              使用说明
+            </h3>
+            <ul>
+              <li>在上方搜索框输入您的姓名</li>
+              <li>系统将自动识别您是员工还是客服</li>
+              <li>点击查询即可查看详细工资信息</li>
+            </ul>
+          </div>
         </div>
       )}
+
+      {/* 底部信息 */}
+      <div className="footer">
+        <span>&copy; 2026 无尽电竞 WJGame</span>
+        <span>|</span>
+        <span>技术支持：IT部门</span>
+        <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>如有疑问，请联系管理员</p>
+      </div>
     </div>
   )
 }

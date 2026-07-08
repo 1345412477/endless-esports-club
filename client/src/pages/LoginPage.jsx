@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import { toast } from '../components/Toast';
 
 export default function LoginPage() {
   const [role, setRole] = useState('admin');
@@ -19,9 +20,11 @@ export default function LoginPage() {
     try {
       const res = await api.post('/auth/login', { username, password, role });
       auth.login(res.data.token, role, username, res.data.displayName);
+      toast('登录成功', 'success');
       navigate(role === 'admin' ? '/admin' : '/cs');
     } catch (err) {
       setError(err.message);
+      toast(err.message, 'error');
     } finally {
       setLoading(false);
     }
