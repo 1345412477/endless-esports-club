@@ -200,9 +200,10 @@ function DashboardTab() {
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       await api.put(`/orders/${orderId}/status`, { status: newStatus })
+      toast('订单状态已更新', 'success')
       await loadOrders()
     } catch (err) {
-      setOrdersError(err.message)
+      toast(err.message, 'error')
     }
   }
 
