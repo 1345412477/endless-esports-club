@@ -27,8 +27,19 @@ function getWorkerSettledTotal(db, workerName) {
   return round2(row.total);
 }
 
+// 从订单计算员工的实际总工资
+function getWorkerOrderSalary(db, workerName) {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
+    FROM order_workers ow
+    JOIN orders o ON ow.order_id = o.id
+    WHERE ow.worker_name = ? AND o.status = '已结单'
+  `).get(workerName);
+  return round2(row.total);
+}
+
 function recalculateWorkerDeposit(db, workerName) {
-  const worker = db.prepare('SELECT deposit, deposit_target FROM config_workers WHERE name = ?').get(workerName);
+  const worker = db.prepare('SELECT deposit, deposit_target, manual_unsettled FROM config_workers WHERE name = ?').get(workerName);
   if (!worker) return { deposit: 0, deposit_target: 0, added: 0 };
 
   const target = round2(worker.deposit_target || 0);
@@ -40,23 +51,22 @@ function recalculateWorkerDeposit(db, workerName) {
     return { deposit: 0, deposit_target: 0, added: 0 };
   }
 
-  const totalSalary = getWorkerTotalSalary(db, workerName);
+  const orderSalary = getWorkerOrderSalary(db, workerName);
+  const manualUnsettled = round2(worker.manual_unsettled || 0);
   const settledTotal = getWorkerSettledTotal(db, workerName);
 
-  const maxDepositCanHold = round2(Math.max(0, totalSalary - settledTotal));
+  // 可用资金 = 订单工资 + 手动未结算 - 已结算（不含当前押金）
+  const available = round2(Math.max(0, orderSalary + manualUnsettled - settledTotal));
 
   let newDeposit = currentDeposit;
-  if (newDeposit > maxDepositCanHold) {
-    newDeposit = maxDepositCanHold;
-  }
   if (newDeposit > target) {
     newDeposit = target;
   }
 
   if (newDeposit < target) {
-    const available = round2(Math.max(0, totalSalary - settledTotal - newDeposit));
+    const canUse = round2(Math.max(0, available - newDeposit));
     const needed = round2(target - newDeposit);
-    const toAdd = round2(Math.min(available, needed));
+    const toAdd = round2(Math.min(canUse, needed));
     newDeposit = round2(newDeposit + toAdd);
   }
 
@@ -87,13 +97,14 @@ function canOrderStatusChange(db, orderId) {
   const workerCount = workers.length;
   for (const w of workers) {
     const orderWorkerSalary = round2(order.price / workerCount - w.deduction_amount);
-    const totalSalary = getWorkerTotalSalary(db, w.worker_name);
+    const orderSalary = getWorkerOrderSalary(db, w.worker_name);
+    const manualUnsettled = round2((db.prepare('SELECT manual_unsettled FROM config_workers WHERE name = ?').get(w.worker_name) || {}).manual_unsettled || 0);
     const settledTotal = getWorkerSettledTotal(db, w.worker_name);
-    const newTotal = round2(totalSalary - orderWorkerSalary);
-    if (settledTotal > newTotal + 0.01) {
+    const newAvailable = round2(orderSalary + manualUnsettled - orderWorkerSalary);
+    if (settledTotal > newAvailable + 0.01) {
       return {
         ok: false,
-        message: `员工【${w.worker_name}】已结算金额(¥${settledTotal.toFixed(2)})超过回退后累计工资(¥${newTotal.toFixed(2)})，请先撤销对应结算记录后再操作`,
+        message: `员工【${w.worker_name}】已结算金额(¥${settledTotal.toFixed(2)})超过回退后可用工资(¥${newAvailable.toFixed(2)})，请先撤销对应结算记录后再操作`,
       };
     }
   }
@@ -120,6 +131,7 @@ module.exports = {
   round2,
   getWorkerTotalSalary,
   getWorkerSettledTotal,
+  getWorkerOrderSalary,
   recalculateWorkerDeposit,
   recalculateWorkersDeposit,
   canOrderStatusChange,

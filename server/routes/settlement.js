@@ -2,7 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
-const { recalculateWorkerDeposit, getWorkerSettledTotal, getWorkerTotalSalary, round2 } = require('../utils/deposit');
+const { recalculateWorkerDeposit, getWorkerSettledTotal, getWorkerOrderSalary, round2 } = require('../utils/deposit');
 
 const router = express.Router();
 
@@ -24,9 +24,11 @@ router.post('/', requireRole('admin'), (req, res) => {
   let totalSalary;
   let currentDeposit = 0;
   if (person_type === 'worker') {
-    const worker = db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(person_name);
+    const worker = db.prepare('SELECT deposit, manual_unsettled FROM config_workers WHERE name = ?').get(person_name);
     currentDeposit = worker ? round2(worker.deposit || 0) : 0;
-    totalSalary = getWorkerTotalSalary(db, person_name);
+    const manualUnsettled = worker ? round2(worker.manual_unsettled || 0) : 0;
+    const orderSalary = getWorkerOrderSalary(db, person_name);
+    totalSalary = round2(orderSalary + manualUnsettled);
   } else {
     const row = db.prepare(
       "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
@@ -59,7 +61,7 @@ router.post('/', requireRole('admin'), (req, res) => {
     const newSettledTotal = round2(settledTotal + settledAmt);
     const workerAfter = person_type === 'worker' ? db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(person_name) : null;
     const newDeposit = workerAfter ? round2(workerAfter.deposit || 0) : 0;
-    const newUnsettled = round2(totalSalary - newSettledTotal - newDeposit);
+    const newUnsettled = round2(Math.max(0, totalSalary - newSettledTotal - newDeposit));
 
     const typeLabel = person_type === 'worker' ? '员工' : '客服';
     logAction('工资结算', '工资结算', `${typeLabel}：${person_name}，结算金额：¥${settledAmt.toFixed(2)}${person_type === 'worker' ? `，当前押金：¥${newDeposit.toFixed(2)}` : ''}`, req.user.username);
