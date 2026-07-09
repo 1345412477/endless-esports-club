@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const { loadDb, setDb, saveDb } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
+const { startAutoBackup } = require('./utils/backup');
 
 async function main() {
   const db = await loadDb();
@@ -54,6 +55,7 @@ async function main() {
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    startAutoBackup();
   });
 }
 
