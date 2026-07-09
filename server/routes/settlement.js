@@ -300,7 +300,7 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
   }
 
   const db = getDb();
-  const worker = db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(worker_name);
+  const worker = db.prepare('SELECT deposit, manual_deposit_base FROM config_workers WHERE name = ?').get(worker_name);
   if (!worker) {
     return res.status(404).json({ code: 1, data: null, message: '员工不存在' });
   }
@@ -308,7 +308,7 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
   const oldDeposit = round2(worker.deposit || 0);
 
   db.transaction(() => {
-    db.prepare('UPDATE config_workers SET deposit = ? WHERE name = ?').run(depositAmt, worker_name);
+    db.prepare('UPDATE config_workers SET deposit = ?, manual_deposit_base = ? WHERE name = ?').run(depositAmt, depositAmt, worker_name);
   })();
 
   logAction('修改押金', '工资结算', `员工：${worker_name}，原押金：¥${oldDeposit.toFixed(2)}，新押金：¥${depositAmt.toFixed(2)}`, req.user.username);

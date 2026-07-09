@@ -202,6 +202,12 @@ class DbWrapper {
       this.sqlDb.run("ALTER TABLE config_workers ADD COLUMN manual_unsettled REAL DEFAULT 0");
     } catch (_) {}
     try {
+      this.sqlDb.run("ALTER TABLE config_workers ADD COLUMN manual_deposit_base REAL DEFAULT 0");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("UPDATE config_workers SET manual_deposit_base = deposit WHERE manual_deposit_base = 0 AND deposit > 0");
+    } catch (_) {}
+    try {
       this.sqlDb.run("ALTER TABLE orders ADD COLUMN serial_no TEXT DEFAULT ''");
     } catch (_) {}
     try {

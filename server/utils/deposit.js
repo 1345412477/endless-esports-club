@@ -39,14 +39,17 @@ function getWorkerOrderSalary(db, workerName) {
 }
 
 function recalculateWorkerDeposit(db, workerName) {
-  const worker = db.prepare('SELECT deposit, deposit_target, manual_unsettled FROM config_workers WHERE name = ?').get(workerName);
+  const worker = db.prepare('SELECT deposit, deposit_target, manual_unsettled, manual_deposit_base FROM config_workers WHERE name = ?').get(workerName);
   if (!worker) return { deposit: 0, deposit_target: 0, added: 0 };
 
   const target = round2(worker.deposit_target || 0);
   const currentDeposit = round2(worker.deposit || 0);
+  const depositBase = round2(worker.manual_deposit_base || 0);
+
+  // 没有押金目标时，清空押金
   if (target <= 0) {
     if (currentDeposit !== 0) {
-      db.prepare('UPDATE config_workers SET deposit = 0 WHERE name = ?').run(workerName);
+      db.prepare('UPDATE config_workers SET deposit = 0, manual_deposit_base = 0 WHERE name = ?').run(workerName);
     }
     return { deposit: 0, deposit_target: 0, added: 0 };
   }
@@ -55,22 +58,16 @@ function recalculateWorkerDeposit(db, workerName) {
   const manualUnsettled = round2(worker.manual_unsettled || 0);
   const settledTotal = getWorkerSettledTotal(db, workerName);
 
-  // 可用资金 = 订单工资 + 手动未结算 - 已结算（不含当前押金）
+  // 可用资金 = 订单工资 + 手动未结算 - 已结算（不含押金，不含手动押金基线）
   const available = round2(Math.max(0, orderSalary + manualUnsettled - settledTotal));
 
-  let newDeposit = currentDeposit;
-  if (newDeposit > target) {
-    newDeposit = target;
-  }
+  // 仅从未结算资金中自动填充押金到目标值
+  // 自动填充部分不能超过总可用资金
+  const autoFillTarget = round2(Math.max(0, target - depositBase));
+  const autoFillAmount = round2(Math.min(available, autoFillTarget));
+  const newDeposit = round2(depositBase + autoFillAmount);
 
-  if (newDeposit < target) {
-    const canUse = round2(Math.max(0, available - newDeposit));
-    const needed = round2(target - newDeposit);
-    const toAdd = round2(Math.min(canUse, needed));
-    newDeposit = round2(newDeposit + toAdd);
-  }
-
-  if (round2(newDeposit) !== round2(worker.deposit || 0)) {
+  if (round2(newDeposit) !== round2(currentDeposit)) {
     db.prepare('UPDATE config_workers SET deposit = ? WHERE name = ?').run(newDeposit, workerName);
   }
 
