@@ -12,9 +12,9 @@
   --danger: #ef4444;
   --radius: 8px;
   --glow: 0 0 12px rgba(26, 115, 232, 0.2);
-  --font-title: 'Tektur', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Jura', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
+  --font-title: 'Tektur', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', 'Consolas', monospace;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
@@ -101,11 +101,15 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.7;
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body::before {
@@ -134,10 +138,10 @@ body::after {
 
 #root { position: relative; z-index: 1; }
 
-h1, h2, h3, h4 { font-family: var(--font-title); font-weight: 500; }
-h1 { font-size: 2rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.2rem; }
+h1, h2, h3, h4 { font-family: var(--font-title); font-weight: 600; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.1rem; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -154,7 +158,7 @@ input, select, textarea {
   color: var(--ink);
   padding: 10px 14px;
   outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 input:focus, select:focus, textarea:focus {
@@ -244,16 +248,16 @@ select { cursor: pointer; appearance: none; background-image: url("data:image/sv
 .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--accent); }
 
 .stat-card .stat-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
-.stat-card .stat-value { font-family: var(--font-mono); font-size: 1.8rem; color: var(--accent); font-weight: 500; }
+.stat-card .stat-value { font-family: var(--font-mono); font-size: 1.5rem; color: var(--accent); font-weight: 600; }
 .stat-card .stat-sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
 
 table { width: 100%; border-collapse: collapse; }
 thead th {
   position: sticky; top: 0;
   background: var(--bg3); color: var(--accent);
-  font-family: var(--font-title); font-weight: 500;
-  padding: 12px 14px; text-align: left; font-size: 0.85rem;
-  text-transform: uppercase; letter-spacing: 0.5px;
+  font-family: var(--font-title); font-weight: 600;
+  padding: 12px 14px; text-align: left; font-size: 0.82rem;
+  text-transform: uppercase; letter-spacing: 0.8px;
   transition: background var(--transition-fast);
 }
 tbody td { padding: 12px 14px; border-bottom: 1px solid var(--rule); font-size: 0.9rem; transition: background var(--transition-fast); }
@@ -478,13 +482,13 @@ tbody tr:hover { background: rgba(26, 115, 232, 0.04); }
 
 .hero-title {
   font-family: var(--font-title);
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 6px;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
 }
 
 .hero-subtitle {

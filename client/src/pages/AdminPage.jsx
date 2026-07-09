@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
@@ -94,6 +94,130 @@ function DashboardTab() {
   const [createForm, setCreateForm] = useState({ cs_name: '', order_type: '', customer_name: '', remark: '', price: '', workers: [{ name: '' }] })
   const [createError, setCreateError] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
+
+  const [dropdownOpen, setDropdownOpen] = useState(null)
+  const [dropdownSearch, setDropdownSearch] = useState('')
+  const dropdownRef = useRef(null)
+
+  useEffect(() => {
+    if (!dropdownOpen) return
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(null)
+        setDropdownSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [dropdownOpen])
+
+  const renderSearchableSelect = (value, onChange, options, placeholder, dropdownKey) => {
+    const isOpen = dropdownOpen === dropdownKey
+    const filtered = options.filter(o =>
+      o.name.toLowerCase().includes(dropdownSearch.toLowerCase())
+    )
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <div
+          onClick={() => {
+            if (isOpen) {
+              setDropdownOpen(null)
+              setDropdownSearch('')
+            } else {
+              setDropdownOpen(dropdownKey)
+              setDropdownSearch('')
+            }
+          }}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            border: '1px solid var(--rule)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            background: 'var(--bg)',
+            color: value ? 'var(--ink)' : 'var(--muted)',
+            fontSize: '0.9rem',
+            boxSizing: 'border-box',
+            userSelect: 'none',
+          }}
+        >
+          {value || placeholder}
+        </div>
+        {isOpen && (
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 200,
+              background: 'var(--bg)',
+              border: '1px solid var(--rule)',
+              borderRadius: '4px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              maxHeight: '220px',
+              overflow: 'hidden',
+            }}
+          >
+            <input
+              type="text"
+              value={dropdownSearch}
+              onChange={(e) => setDropdownSearch(e.target.value)}
+              placeholder="搜索员工..."
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                border: 'none',
+                borderBottom: '1px solid var(--rule)',
+                padding: '8px 12px',
+                outline: 'none',
+                background: 'var(--bg)',
+                color: 'var(--ink)',
+                fontSize: '0.85rem',
+                boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ overflowY: 'auto', maxHeight: '170px' }}>
+              {filtered.length === 0 ? (
+                <div style={{ padding: '8px 12px', color: 'var(--muted)', fontSize: '0.85rem' }}>
+                  无匹配结果
+                </div>
+              ) : (
+                filtered.map(opt => (
+                  <div
+                    key={opt.name}
+                    onClick={() => {
+                      onChange(opt.name)
+                      setDropdownOpen(null)
+                      setDropdownSearch('')
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      color: 'var(--ink)',
+                      background: value === opt.name ? 'var(--surface)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (value !== opt.name) e.target.style.background = 'var(--surface)'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (value !== opt.name) e.target.style.background = 'transparent'
+                    }}
+                  >
+                    {opt.name}（{(opt.default_deduction_rate * 100).toFixed(0)}%抽成）
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const getDateParam = () => {
     const d = currentDate
@@ -848,17 +972,10 @@ function DashboardTab() {
                   <div className="form-group">
                     <label>关联员工 ({editForm.workers.length}/2)</label>
                     {editForm.workers.map((worker, index) => (
-                      <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-                        <select
-                          value={worker.name}
-                          onChange={e => updateEditWorker(index, e.target.value)}
-                          style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--rule)', borderRadius: '4px', background: 'var(--bg)', color: 'var(--ink)', fontSize: '0.9rem' }}
-                        >
-                          <option value="">请选择员工</option>
-                          {activeWorkers.map(w => (
-                            <option key={w.name} value={w.name}>{w.name}（{(w.default_deduction_rate * 100).toFixed(0)}%抽成）</option>
-                          ))}
-                        </select>
+                      <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '6px', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          {renderSearchableSelect(worker.name, (v) => updateEditWorker(index, v), activeWorkers, '请选择员工', `edit-${index}`)}
+                        </div>
                         {editForm.workers.length > 1 && (
                           <button type="button" className="btn btn-outline btn-sm" onClick={() => removeEditWorker(index)}>移除</button>
                         )}
@@ -944,17 +1061,10 @@ function DashboardTab() {
                   <div className="form-group">
                     <label>关联员工 ({createForm.workers.length}/2) <span style={{ color: 'var(--danger)' }}>*</span></label>
                     {createForm.workers.map((worker, index) => (
-                      <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-                        <select
-                          value={worker.name}
-                          onChange={e => updateCreateWorker(index, e.target.value)}
-                          style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--rule)', borderRadius: '4px', background: 'var(--bg)', color: 'var(--ink)', fontSize: '0.9rem' }}
-                        >
-                          <option value="">请选择员工</option>
-                          {activeWorkers.map(w => (
-                            <option key={w.name} value={w.name}>{w.name}（{(w.default_deduction_rate * 100).toFixed(0)}%抽成）</option>
-                          ))}
-                        </select>
+                      <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '6px', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          {renderSearchableSelect(worker.name, (v) => updateCreateWorker(index, v), activeWorkers, '请选择员工', `create-${index}`)}
+                        </div>
                         {createForm.workers.length > 1 && (
                           <button type="button" className="btn btn-outline btn-sm" onClick={() => removeCreateWorker(index)}>移除</button>
                         )}
