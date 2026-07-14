@@ -489,18 +489,6 @@ export default function WorkerPage() {
               <p>查看结算记录和押金进度</p>
             </div>
           </div>
-          
-          <div className="usage-guide">
-            <h3>
-              <Icon.Info size={20} style={{ marginRight: '8px' }} />
-              使用说明
-            </h3>
-            <ul>
-              <li>在上方搜索框输入您的姓名</li>
-              <li>系统将自动识别您是员工还是客服</li>
-              <li>点击查询即可查看详细工资信息</li>
-            </ul>
-          </div>
         </div>
       )}
 

@@ -557,48 +557,6 @@ tbody tr:hover { background: rgba(26, 115, 232, 0.04); }
   line-height: 1.5;
 }
 
-/* 使用说明 */
-.usage-guide {
-  background: var(--bg3);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 24px 28px;
-  max-width: 560px;
-  margin: 0 auto;
-  animation: fadeIn 0.5s ease;
-}
-
-.usage-guide h3 {
-  font-family: var(--font-title);
-  font-size: 1.05rem;
-  margin-bottom: 14px;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-}
-
-.usage-guide ul {
-  list-style: none;
-  padding: 0;
-}
-
-.usage-guide li {
-  padding: 7px 0;
-  padding-left: 26px;
-  position: relative;
-  color: var(--ink);
-  font-size: 0.92rem;
-  line-height: 1.6;
-}
-
-.usage-guide li::before {
-  content: '\2713';
-  position: absolute;
-  left: 0;
-  color: var(--success);
-  font-weight: bold;
-}
-
 /* 底部信息 */
 .footer {
   text-align: center;
