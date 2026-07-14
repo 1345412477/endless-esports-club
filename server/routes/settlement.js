@@ -23,9 +23,11 @@ router.post('/', requireRole('admin'), (req, res) => {
 
   let totalSalary;
   let currentDeposit = 0;
+  let depositBase = 0;
   if (person_type === 'worker') {
-    const worker = db.prepare('SELECT deposit, manual_unsettled FROM config_workers WHERE name = ?').get(person_name);
+    const worker = db.prepare('SELECT deposit, manual_unsettled, manual_deposit_base FROM config_workers WHERE name = ?').get(person_name);
     currentDeposit = worker ? round2(worker.deposit || 0) : 0;
+    depositBase = worker ? round2(worker.manual_deposit_base || 0) : 0;
     const manualUnsettled = worker ? round2(worker.manual_unsettled || 0) : 0;
     const orderSalary = getWorkerOrderSalary(db, person_name);
     totalSalary = round2(orderSalary + manualUnsettled);
@@ -41,9 +43,10 @@ router.post('/', requireRole('admin'), (req, res) => {
   ).get(person_name, person_type);
   const settledTotal = round2(settledRow.total);
 
-  const unsettled = round2(totalSalary - settledTotal - currentDeposit);
+  const depositFromOrders = Math.max(0, currentDeposit - depositBase);
+  const unsettled = round2(Math.max(0, totalSalary - settledTotal - depositFromOrders));
   if (settledAmt > unsettled + 0.01) {
-    return res.status(400).json({ code: 1, data: null, message: `结算金额超出待结算余额，当前可结算：¥${unsettled.toFixed(2)}元（已扣除押金¥${currentDeposit.toFixed(2)}）` });
+    return res.status(400).json({ code: 1, data: null, message: `结算金额超出待结算余额，当前可结算：¥${unsettled.toFixed(2)}元（已扣除押金¥${depositFromOrders.toFixed(2)}）` });
   }
 
   const txn = db.transaction(() => {
@@ -59,9 +62,11 @@ router.post('/', requireRole('admin'), (req, res) => {
   try {
     txn();
     const newSettledTotal = round2(settledTotal + settledAmt);
-    const workerAfter = person_type === 'worker' ? db.prepare('SELECT deposit FROM config_workers WHERE name = ?').get(person_name) : null;
+    const workerAfter = person_type === 'worker' ? db.prepare('SELECT deposit, manual_deposit_base FROM config_workers WHERE name = ?').get(person_name) : null;
     const newDeposit = workerAfter ? round2(workerAfter.deposit || 0) : 0;
-    const newUnsettled = round2(Math.max(0, totalSalary - newSettledTotal - newDeposit));
+    const newDepositBase = workerAfter ? round2(workerAfter.manual_deposit_base || 0) : 0;
+    const newDepositFromOrders = Math.max(0, newDeposit - newDepositBase);
+    const newUnsettled = round2(Math.max(0, totalSalary - newSettledTotal - newDepositFromOrders));
 
     const typeLabel = person_type === 'worker' ? '员工' : '客服';
     logAction('工资结算', '工资结算', `${typeLabel}：${person_name}，结算金额：¥${settledAmt.toFixed(2)}${person_type === 'worker' ? `，当前押金：¥${newDeposit.toFixed(2)}` : ''}`, req.user.username);
