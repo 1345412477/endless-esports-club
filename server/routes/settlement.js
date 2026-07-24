@@ -3,7 +3,7 @@ const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
 const { recalculateWorkerDeposit, getWorkerSettledTotal, getWorkerOrderSalary, round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
-const { PERSON_TYPE_WORKER, PERSON_TYPE_CS, ROUND_TOLERANCE } = require('../utils/constants');
+const { PERSON_TYPE_WORKER, PERSON_TYPE_CS, PERSON_TYPE_DEPOSIT_REFUND, ROUND_TOLERANCE } = require('../utils/constants');
 const { success, badRequest, notFound } = require('../utils/response');
 
 const router = express.Router();
