@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
 import { toast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
-import { ORDER_STATUSES } from '../utils/constants'
+import { ORDER_STATUSES, DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { formatDate, formatMoney } from '../utils/helpers'
 
 const VALID_STATUSES = ORDER_STATUSES
