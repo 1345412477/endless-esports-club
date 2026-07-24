@@ -1957,8 +1957,6 @@ function SettlementTab() {
   const [csPage, setCsPage] = useState(1)
   const [workerSearch, setWorkerSearch] = useState('')
   const [csSearch, setCsSearch] = useState('')
-  const [editingCell, setEditingCell] = useState(null) // { personName, personType, field, recordId }
-  const [editValue, setEditValue] = useState('')
   const pageSize = DEFAULT_PAGE_SIZE
 
   const loadData = useCallback(async () => {
@@ -2155,177 +2153,21 @@ function SettlementTab() {
                 <tbody>
                   {workerList.filter(w => !workerSearch || w.name.includes(workerSearch)).slice((workerPage - 1) * pageSize, workerPage * pageSize).map(w => {
                   const key = 'worker_' + w.name
-                  const isEditingSettled = editingCell?.personName === w.name && editingCell?.personType === 'worker' && editingCell?.field === 'settled_total'
-                  const isEditingUnsettled = editingCell?.personName === w.name && editingCell?.personType === 'worker' && editingCell?.field === 'unsettled'
-                  const isEditingDeposit = editingCell?.personName === w.name && editingCell?.personType === 'worker' && editingCell?.field === 'deposit'
                   return (
                     <tr key={w.name}>
                       <td>{w.name}</td>
                       <td>¥{formatMoney(w.total_salary)}</td>
-                      <td
-                        style={{ color: 'var(--success)', cursor: 'pointer', position: 'relative' }}
-                        onDoubleClick={() => {
-                          setEditingCell({ personName: w.name, personType: 'worker', field: 'settled_total' })
-                          setEditValue(String(w.settled_total))
-                        }}
-                        title="双击编辑"
-                      >
-                        {isEditingSettled ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <input
-                              type="number"
-                              autoFocus
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  const val = parseFloat(editValue)
-                                  if (!isNaN(val) && val >= 0) {
-                                    api.put('/settlement/adjust-settled', { person_name: w.name, person_type: 'worker', target_settled: val })
-                                      .then(() => loadData())
-                                      .catch(err => setError(err.message))
-                                  }
-                                  setEditingCell(null)
-                                  setEditValue('')
-                                }
-                                if (e.key === 'Escape') { setEditingCell(null); setEditValue('') }
-                              }}
-                              style={{ width: '80px', padding: '2px 4px' }}
-                              step="0.01"
-                              min="0"
-                            />
-                            <button
-                              onClick={async () => {
-                                const val = parseFloat(editValue)
-                                if (!isNaN(val) && val >= 0) {
-                                  try {
-                                    await api.put('/settlement/adjust-settled', { person_name: w.name, person_type: 'worker', target_settled: val })
-                                    await loadData()
-                                  } catch (err) {
-                                    setError(err.message)
-                                  }
-                                }
-                                setEditingCell(null)
-                                setEditValue('')
-                              }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
-                            >✓</button>
-                          </div>
-                        ) : (
-                          <>¥{formatMoney(w.settled_total)}</>
-                        )}
+                      <td style={{ color: 'var(--success)' }}>
+                        ¥{formatMoney(w.settled_total)}
                       </td>
-                      <td
-                        style={{ color: 'var(--warning)', cursor: 'pointer' }}
-                        onDoubleClick={() => {
-                          setEditingCell({ personName: w.name, personType: 'worker', field: 'unsettled' })
-                          setEditValue(String(w.unsettled))
-                        }}
-                        title="双击编辑"
-                      >
-                        {isEditingUnsettled ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <input
-                              type="number"
-                              autoFocus
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  const val = parseFloat(editValue)
-                                  if (!isNaN(val) && val >= 0) {
-                                    api.put('/settlement/worker-unsettled', { worker_name: w.name, unsettled: val })
-                                      .then(() => loadData())
-                                      .catch(err => setError(err.message))
-                                  }
-                                  setEditingCell(null)
-                                  setEditValue('')
-                                }
-                                if (e.key === 'Escape') { setEditingCell(null); setEditValue('') }
-                              }}
-                              style={{ width: '80px', padding: '2px 4px' }}
-                              step="0.01"
-                              min="0"
-                            />
-                            <button
-                              onClick={async () => {
-                                const val = parseFloat(editValue)
-                                if (!isNaN(val) && val >= 0) {
-                                  try {
-                                    await api.put('/settlement/worker-unsettled', { worker_name: w.name, unsettled: val })
-                                    await loadData()
-                                  } catch (err) {
-                                    setError(err.message)
-                                  }
-                                }
-                                setEditingCell(null)
-                                setEditValue('')
-                              }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
-                            >✓</button>
-                          </div>
-                        ) : (
-                          <>¥{formatMoney(w.unsettled)}</>
-                        )}
+                      <td style={{ color: 'var(--warning)' }}>
+                        ¥{formatMoney(w.unsettled)}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {isEditingDeposit ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <input
-                                type="number"
-                                autoFocus
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault()
-                                    const val = parseFloat(editValue)
-                                    if (!isNaN(val) && val >= 0) {
-                                      api.put('/settlement/worker-deposit', { worker_name: w.name, deposit: val })
-                                        .then(() => loadData())
-                                        .catch(err => setError(err.message))
-                                    }
-                                    setEditingCell(null)
-                                    setEditValue('')
-                                  }
-                                  if (e.key === 'Escape') { setEditingCell(null); setEditValue('') }
-                                }}
-                                style={{ width: '70px', padding: '2px 4px' }}
-                                step="0.01"
-                                min="0"
-                              />
-                              <button
-                                onClick={async () => {
-                                  const val = parseFloat(editValue)
-                                  if (!isNaN(val) && val >= 0) {
-                                    try {
-                                      await api.put('/settlement/worker-deposit', { worker_name: w.name, deposit: val })
-                                      await loadData()
-                                    } catch (err) {
-                                      setError(err.message)
-                                    }
-                                  }
-                                  setEditingCell(null)
-                                  setEditValue('')
-                                }}
-                                style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
-                              >✓</button>
-                            </div>
-                          ) : (
-                            <span
-                              style={{ fontSize: '0.85rem', color: 'var(--danger)', cursor: 'pointer' }}
-                              onDoubleClick={() => {
-                                setEditingCell({ personName: w.name, personType: 'worker', field: 'deposit' })
-                                setEditValue(String(w.deposit))
-                              }}
-                              title="双击编辑"
-                            >
-                              ¥{formatMoney(w.deposit)}
-                            </span>
-                          )}
+                          <span style={{ fontSize: '0.85rem', color: 'var(--danger)' }}>
+                            ¥{formatMoney(w.deposit)}
+                          </span>
                           {w.deposit_target > 0 && (
                             <>
                               <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>/</span>
@@ -2465,64 +2307,12 @@ function SettlementTab() {
                 <tbody>
                   {csList.filter(c => !csSearch || c.name.includes(csSearch)).slice((csPage - 1) * pageSize, csPage * pageSize).map(c => {
                   const key = 'cs_' + c.name
-                  const isEditingCsSettled = editingCell?.personName === c.name && editingCell?.personType === 'cs' && editingCell?.field === 'settled_total'
                   return (
                     <tr key={c.name}>
                       <td>{c.name}</td>
                       <td>¥{formatMoney(c.total_salary)}</td>
-                      <td
-                        style={{ color: 'var(--success)', cursor: 'pointer' }}
-                        onDoubleClick={() => {
-                          setEditingCell({ personName: c.name, personType: 'cs', field: 'settled_total' })
-                          setEditValue(String(c.settled_total))
-                        }}
-                        title="双击编辑"
-                      >
-                        {isEditingCsSettled ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <input
-                              type="number"
-                              autoFocus
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  const val = parseFloat(editValue)
-                                  if (!isNaN(val) && val >= 0) {
-                                    api.put('/settlement/adjust-settled', { person_name: c.name, person_type: 'cs', target_settled: val })
-                                      .then(() => loadData())
-                                      .catch(err => setError(err.message))
-                                  }
-                                  setEditingCell(null)
-                                  setEditValue('')
-                                }
-                                if (e.key === 'Escape') { setEditingCell(null); setEditValue('') }
-                              }}
-                              style={{ width: '80px', padding: '2px 4px' }}
-                              step="0.01"
-                              min="0"
-                            />
-                            <button
-                              onClick={async () => {
-                                const val = parseFloat(editValue)
-                                if (!isNaN(val) && val >= 0) {
-                                  try {
-                                    await api.put('/settlement/adjust-settled', { person_name: c.name, person_type: 'cs', target_settled: val })
-                                    await loadData()
-                                  } catch (err) {
-                                    setError(err.message)
-                                  }
-                                }
-                                setEditingCell(null)
-                                setEditValue('')
-                              }}
-                              style={{ padding: '1px 6px', fontSize: '0.75rem', cursor: 'pointer', background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: '700', minWidth: '28px' }}
-                            >✓</button>
-                          </div>
-                        ) : (
-                          <>¥{formatMoney(c.settled_total)}</>
-                        )}
+                      <td style={{ color: 'var(--success)' }}>
+                        ¥{formatMoney(c.settled_total)}
                       </td>
                       <td style={{ color: 'var(--warning)' }}>
                         ¥{formatMoney(c.unsettled)}
