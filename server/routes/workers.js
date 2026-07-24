@@ -1,12 +1,14 @@
 const express = require('express');
 const { getDb } = require('../db');
+const { success, badRequest } = require('../utils/response');
+const { calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
 
 const router = express.Router();
 
 router.get('/worker', (req, res) => {
   const { name, page = 1, size = 20 } = req.query;
   if (!name) {
-    return res.status(400).json({ code: 1, data: null, message: '请输入姓名' });
+    return badRequest(res, '请输入姓名');
   }
 
   const db = getDb();
@@ -15,7 +17,7 @@ router.get('/worker', (req, res) => {
 
   const worker = db.prepare('SELECT * FROM config_workers WHERE name = ? AND status = ?').get(name, '在店');
   if (!worker) {
-    return res.json({ code: 0, data: { type: null, message: '未找到该人员信息' }, message: 'ok' });
+    return success(res, { type: null, message: '未找到该人员信息' });
   }
 
   const countRow = db.prepare(`
@@ -62,36 +64,32 @@ router.get('/worker', (req, res) => {
   const depositTarget = worker.deposit_target || 0;
   const manualUnsettled = worker.manual_unsettled || 0;
   const depositBase = worker.manual_deposit_base || 0;
-  const depositFromOrders = Math.max(0, deposit - depositBase);
+  const depositFromOrders = calcDepositFromOrders(deposit, depositBase);
 
-  res.json({
-    code: 0,
-    data: {
-      type: 'worker',
-      worker: { name, default_deduction_rate: worker.default_deduction_rate, rating: worker.rating, status: worker.status, deposit: deposit, deposit_target: depositTarget },
-      summary: {
-        completed_count: agg.completed_count,
-        unsettled: Math.max(0, agg.total_salary + manualUnsettled - agg.settled_total - depositFromOrders),
-        total_salary: Math.max(0, agg.total_salary + manualUnsettled - depositFromOrders) + deposit,
-        settled_total: agg.settled_total,
-        deposit: deposit,
-        deposit_target: depositTarget,
-        month_count: aggMonth.month_count,
-      },
-      orders,
-      settlements,
-      total: countRow.total,
-      page: Number(page),
-      size: Number(size),
+  success(res, {
+    type: 'worker',
+    worker: { name, default_deduction_rate: worker.default_deduction_rate, rating: worker.rating, status: worker.status, deposit: deposit, deposit_target: depositTarget },
+    summary: {
+      completed_count: agg.completed_count,
+      unsettled: calcUnsettled(agg.total_salary, manualUnsettled, agg.settled_total, depositFromOrders),
+      total_salary: Math.max(0, agg.total_salary + manualUnsettled - depositFromOrders) + deposit,
+      settled_total: agg.settled_total,
+      deposit: deposit,
+      deposit_target: depositTarget,
+      month_count: aggMonth.month_count,
     },
-    message: 'ok',
+    orders,
+    settlements,
+    total: countRow.total,
+    page: Number(page),
+    size: Number(size),
   });
 });
 
 router.get('/cs', (req, res) => {
   const { name, page = 1, size = 20 } = req.query;
   if (!name) {
-    return res.status(400).json({ code: 1, data: null, message: '请输入姓名' });
+    return badRequest(res, '请输入姓名');
   }
 
   const db = getDb();
@@ -100,7 +98,7 @@ router.get('/cs', (req, res) => {
 
   const cs = db.prepare('SELECT * FROM config_cs WHERE name = ? AND active = 1').get(name);
   if (!cs) {
-    return res.json({ code: 0, data: { type: null, message: '未找到该人员信息' }, message: 'ok' });
+    return success(res, { type: null, message: '未找到该人员信息' });
   }
 
   const countRow = db.prepare(
@@ -135,25 +133,21 @@ router.get('/cs', (req, res) => {
     "SELECT id, settled_amount, settled_by, remark, reversed, settled_at FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0 ORDER BY settled_at DESC"
   ).all(name, 'cs');
 
-  res.json({
-    code: 0,
-    data: {
-      type: 'cs',
-      cs: { name },
-      summary: {
-        order_count: agg.order_count,
-        total_salary: agg.total_salary,
-        settled_total: agg.settled_total,
-        unsettled: agg.total_salary - agg.settled_total,
-        month_salary: aggMonth.month_salary,
-      },
-      orders,
-      settlements,
-      total: countRow.total,
-      page: Number(page),
-      size: Number(size),
+  success(res, {
+    type: 'cs',
+    cs: { name },
+    summary: {
+      order_count: agg.order_count,
+      total_salary: agg.total_salary,
+      settled_total: agg.settled_total,
+      unsettled: agg.total_salary - agg.settled_total,
+      month_salary: aggMonth.month_salary,
     },
-    message: 'ok',
+    orders,
+    settlements,
+    total: countRow.total,
+    page: Number(page),
+    size: Number(size),
   });
 });
 

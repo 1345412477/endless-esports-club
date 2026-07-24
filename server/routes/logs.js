@@ -1,6 +1,7 @@
 const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
+const { success } = require('../utils/response');
 
 const router = express.Router();
 
@@ -41,11 +42,7 @@ router.get('/', requireRole('admin'), (req, res) => {
     `SELECT * FROM operation_logs ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
   ).all(...params, limit, offset);
 
-  res.json({
-    code: 0,
-    data: { list: logs, total: countRow.total, page: Number(page), size: Number(size) },
-    message: 'ok',
-  });
+  success(res, { list: logs, total: countRow.total, page: Number(page), size: Number(size) });
 });
 
 function csvEscape(v) {

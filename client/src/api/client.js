@@ -17,22 +17,39 @@ async function request(method, path, body) {
   const token = getToken();
   if (token) headers['Authorization'] = 'Bearer ' + token;
 
-  const res = await fetch(BASE + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  try {
+    const res = await fetch(BASE + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
-  if (res.status === 401) {
-    clearAuth();
-    throw new Error('登录已过期，请重新登录');
-  }
+    if (res.status === 401) {
+      clearAuth();
+      throw new Error('登录已过期，请重新登录');
+    }
 
-  const data = await res.json();
-  if (data.code !== 0) {
-    throw new Error(data.message);
+    if (!res.ok) {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        throw new Error(data.message || '请求失败');
+      } catch {
+        throw new Error(`服务器错误：${res.status}`);
+      }
+    }
+
+    const data = await res.json();
+    if (data.code !== 0) {
+      throw new Error(data.message);
+    }
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      throw new Error('网络连接失败，请检查网络');
+    }
+    throw err;
   }
-  return data;
 }
 
 export const api = {

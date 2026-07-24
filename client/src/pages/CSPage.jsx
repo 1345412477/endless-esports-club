@@ -4,34 +4,11 @@ import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
 import { toast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
+import { ORDER_STATUSES, DEFAULT_PAGE_SIZE } from '../utils/constants'
+import { formatDate, formatMoney, getStatusStyle } from '../utils/helpers'
 
-const PAGE_SIZE = 5
-const VALID_STATUSES = ['接单中', '已结单', '存单', '退单']
-
-function getStatusStyle(status) {
-  switch (status) {
-    case '接单中':
-      return { background: 'rgba(6,182,212,0.12)', color: '#0891b2', border: '1px solid rgba(6,182,212,0.4)' }
-    case '已结单':
-      return { background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.4)' }
-    case '存单':
-      return { background: 'rgba(245,158,11,0.12)', color: '#d97706', border: '1px solid rgba(245,158,11,0.4)' }
-    case '退单':
-      return { background: 'rgba(239,68,68,0.12)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.4)' }
-    default:
-      return { background: 'var(--bg)', color: 'var(--ink)', border: '1px solid var(--rule)' }
-  }
-}
-
-function formatDate(d) {
-  if (!d) return '-'
-  return d.slice(0, 16).replace('T', ' ')
-}
-
-function formatMoney(v) {
-  if (v == null) return '0'
-  return Number(v).toFixed(2)
-}
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
+const VALID_STATUSES = ORDER_STATUSES
 
 export default function CSPage() {
   const navigate = useNavigate()

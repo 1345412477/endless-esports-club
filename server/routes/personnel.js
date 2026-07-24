@@ -1,5 +1,7 @@
 const express = require('express');
 const { getDb } = require('../db');
+const { success } = require('../utils/response');
+const { calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
 
 const router = express.Router();
 
@@ -19,11 +21,11 @@ router.get('/workers/list', (req, res) => {
     const manualUnsettled = w.manual_unsettled || 0;
     const deposit = w.deposit || 0;
     const depositBase = w.manual_deposit_base || 0;
-    const depositFromOrders = Math.max(0, deposit - depositBase);
-    w.unsettled = Math.max(0, orderSalary + manualUnsettled - settled - depositFromOrders);
+    const depositFromOrders = calcDepositFromOrders(deposit, depositBase);
+    w.unsettled = calcUnsettled(orderSalary, manualUnsettled, settled, depositFromOrders);
     w.total_salary = settled + w.unsettled + deposit;
   }
-  res.json({ code: 0, data: workers, message: 'ok' });
+  success(res, workers);
 });
 
 router.get('/cs/list', (req, res) => {
@@ -39,7 +41,7 @@ router.get('/cs/list', (req, res) => {
   for (const c of csList) {
     c.unsettled = c.total_salary - c.settled_total;
   }
-  res.json({ code: 0, data: csList, message: 'ok' });
+  success(res, csList);
 });
 
 module.exports = router;

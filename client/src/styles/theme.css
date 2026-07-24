@@ -164,7 +164,10 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
-  transform: translateY(-1px);
+}
+
+input[type="date"]:focus {
+  transform: none;
 }
 
 input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
@@ -201,7 +204,7 @@ select { cursor: pointer; appearance: none; background-image: url("data:image/sv
   animation: fadeIn 0.4s ease;
 }
 
-.card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
 
 .badge {
   display: inline-block; padding: 3px 10px; border-radius: 12px;

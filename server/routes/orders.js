@@ -3,10 +3,12 @@ const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
 const { recalculateWorkersDeposit, canOrderStatusChange } = require('../utils/deposit');
+const { ORDER_STATUSES, ORDER_SETTLED_STATUS, WORKER_ACTIVE_STATUS, DEFAULT_CS_COMMISSION_RATE } = require('../utils/constants');
+const { success, badRequest, notFound, forbidden } = require('../utils/response');
 
 const router = express.Router();
 
-const VALID_STATUSES = ['接单中', '已结单', '存单', '退单'];
+const VALID_STATUSES = ORDER_STATUSES;
 
 function generateSerialNo(db) {
   const today = new Date();
@@ -40,21 +42,21 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
   }
 
   if (!cs_name) {
-    return res.status(400).json({ code: 1, data: null, message: '请选择客服' });
+    return badRequest(res, '请选择客服');
   }
   if (!order_type || !price || !workers || !Array.isArray(workers)) {
-    return res.status(400).json({ code: 1, data: null, message: '缺少必填字段' });
+    return badRequest(res, '缺少必填字段');
   }
   if (workers.length < 1 || workers.length > 2) {
-    return res.status(400).json({ code: 1, data: null, message: '关联员工数量为1-2人' });
+    return badRequest(res, '关联员工数量为1-2人');
   }
   if (price <= 0) {
-    return res.status(400).json({ code: 1, data: null, message: '单子价格必须大于0' });
+    return badRequest(res, '单子价格必须大于0');
   }
 
   const workerNames = workers.map(w => w.name);
   if (new Set(workerNames).size !== workerNames.length) {
-    return res.status(400).json({ code: 1, data: null, message: '员工不能重复' });
+    return badRequest(res, '员工不能重复');
   }
 
   const db = getDb();
@@ -63,20 +65,20 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
     'SELECT id, commission_rate FROM config_cs WHERE name = ? AND active = 1'
   ).get(cs_name);
   if (!csRow) {
-    return res.status(400).json({ code: 1, data: null, message: '客服不存在或已禁用' });
+    return badRequest(res, '客服不存在或已禁用');
   }
-  const csCommissionRate = csRow.commission_rate != null ? csRow.commission_rate : 0.02;
+  const csCommissionRate = csRow.commission_rate != null ? csRow.commission_rate : DEFAULT_CS_COMMISSION_RATE;
 
   for (const w of workers) {
     const ex = db.prepare(
       'SELECT default_deduction_rate FROM config_workers WHERE name = ? AND status = ?'
-    ).get(w.name, '在店');
+    ).get(w.name, WORKER_ACTIVE_STATUS);
     if (!ex) {
-      return res.status(400).json({ code: 1, data: null, message: `员工 ${w.name} 不存在或已禁用` });
+      return badRequest(res, `员工 ${w.name} 不存在或已禁用`);
     }
     w._deduction_rate = w.deduction_rate !== undefined ? w.deduction_rate : ex.default_deduction_rate;
     if (w._deduction_rate < 0 || w._deduction_rate > 1) {
-      return res.status(400).json({ code: 1, data: null, message: '被抽成比例必须在0-1之间' });
+      return badRequest(res, '被抽成比例必须在0-1之间');
     }
   }
 
@@ -85,7 +87,7 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
 
   const insertOrder = db.prepare(`
     INSERT INTO orders (serial_no, cs_name, order_type, customer_name, remark, price, status, cs_commission_rate, cs_commission_amount)
-    VALUES (?, ?, ?, ?, ?, ?, '接单中', ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertWorker = db.prepare(`
     INSERT INTO order_workers (order_id, worker_name, deduction_rate, deduction_amount)
@@ -94,7 +96,7 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
 
   const txn = db.transaction(() => {
     const serialNo = generateSerialNo(db);
-    const result = insertOrder.run(serialNo, cs_name, order_type, customer_name || '', remark || '', price, csCommissionRate, csCommissionAmount);
+    const result = insertOrder.run(serialNo, cs_name, order_type, customer_name || '', remark || '', price, '接单中', csCommissionRate, csCommissionAmount);
     const orderId = result.lastInsertRowid;
 
     for (const w of workers) {
@@ -107,22 +109,19 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
   const { orderId, serialNo } = txn();
   const customerPart = customer_name ? `，客户：${customer_name}` : '';
   logAction('创建订单', '订单管理', `订单#${orderId}，流水号：${serialNo}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}`, req.user.username);
-  res.json({ code: 0, data: { id: orderId, serial_no: serialNo }, message: 'ok' });
+  success(res, { id: orderId, serial_no: serialNo });
 });
 
-router.get('/', requireRole('cs', 'admin'), (req, res) => {
+router.get('/', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const db = getDb();
-  const { status, cs_name, date, page = 1, size = 20 } = req.query;
+  const { status, cs_name, date, date_from, date_to, page = 1, size = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(size);
   const limit = Number(size);
 
   let where = [];
   let params = [];
 
-  if (req.user.role === 'cs') {
-    where.push('o.cs_name = ?');
-    params.push(req.user.csName);
-  } else if (cs_name) {
+  if (cs_name) {
     where.push('o.cs_name = ?');
     params.push(cs_name);
   }
@@ -134,6 +133,14 @@ router.get('/', requireRole('cs', 'admin'), (req, res) => {
   if (date) {
     where.push("date(o.created_at) = date(?)");
     params.push(date);
+  }
+  if (date_from) {
+    where.push("date(o.created_at) >= date(?)");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(o.created_at) <= date(?)");
+    params.push(date_to);
   }
 
   const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
@@ -149,39 +156,32 @@ router.get('/', requireRole('cs', 'admin'), (req, res) => {
     ).all(order.id);
   }
 
-  res.json({ code: 0, data: { list: orders, total: countRow.total, page: Number(page), size: Number(size) }, message: 'ok' });
+  success(res, { list: orders, total: countRow.total, page: Number(page), size: Number(size) });
 });
 
 router.put('/:id/status', requireRole('cs', 'admin'), (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   if (!VALID_STATUSES.includes(status)) {
-    return res.status(400).json({ code: 1, data: null, message: '无效的状态值' });
+    return badRequest(res, '无效的状态值');
   }
   const db = getDb();
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
-    return res.status(404).json({ code: 1, data: null, message: '单据不存在' });
+    return notFound(res, '单据不存在');
   }
 
-  if (req.user.role === 'cs' && order.cs_name !== req.user.csName) {
-    return res.status(403).json({ code: 1, data: null, message: '无权操作他人订单' });
-  }
-
-  if (order.status === '已结单' && status !== '已结单') {
+  if (order.status === ORDER_SETTLED_STATUS && status !== ORDER_SETTLED_STATUS) {
     const check = canOrderStatusChange(db, id);
     if (!check.ok) {
-      return res.status(400).json({ code: 1, data: null, message: check.message });
+      return badRequest(res, check.message);
     }
   }
 
   const txn = db.transaction(() => {
     db.prepare("UPDATE orders SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(status, id);
 
-    if (status === '已结单') {
-      const workers = db.prepare('SELECT worker_name FROM order_workers WHERE order_id = ?').all(id);
-      recalculateWorkersDeposit(db, workers.map(w => w.worker_name));
-    } else if (order.status === '已结单' && status !== '已结单') {
+    if (status === ORDER_SETTLED_STATUS || (order.status === ORDER_SETTLED_STATUS && status !== ORDER_SETTLED_STATUS)) {
       const workers = db.prepare('SELECT worker_name FROM order_workers WHERE order_id = ?').all(id);
       recalculateWorkersDeposit(db, workers.map(w => w.worker_name));
     }
@@ -190,9 +190,9 @@ router.put('/:id/status', requireRole('cs', 'admin'), (req, res) => {
   try {
     txn();
     logAction('订单状态变更', '订单管理', `${orderTag(order)}，状态：${order.status} → ${status}`, req.user.username);
-    res.json({ code: 0, data: null, message: 'ok' });
+    success(res, null);
   } catch (e) {
-    res.status(400).json({ code: 1, data: null, message: e.message });
+    badRequest(res, e.message);
   }
 });
 
@@ -202,15 +202,11 @@ router.put('/:id', requireRole('cs', 'admin'), (req, res) => {
   const db = getDb();
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
-    return res.status(404).json({ code: 1, data: null, message: '单据不存在' });
+    return notFound(res, '单据不存在');
   }
 
-  if (req.user.role === 'cs' && order.cs_name !== req.user.csName) {
-    return res.status(403).json({ code: 1, data: null, message: '无权操作他人订单' });
-  }
-
-  if (req.user.role === 'admin' && order.status === '已结单') {
-    return res.status(400).json({ code: 1, data: null, message: '管理员无法编辑已结单订单' });
+  if (req.user.role === 'admin' && order.status === ORDER_SETTLED_STATUS) {
+    return badRequest(res, '管理员无法编辑已结单订单');
   }
 
   const oldWorkers = db.prepare('SELECT worker_name, deduction_rate, deduction_amount FROM order_workers WHERE order_id = ?').all(id);
@@ -252,7 +248,7 @@ router.put('/:id', requireRole('cs', 'admin'), (req, res) => {
       } else {
         const defaultRate = db.prepare(
           'SELECT default_deduction_rate FROM config_workers WHERE name = ? AND status = ?'
-        ).get(w.name, '在店');
+        ).get(w.name, WORKER_ACTIVE_STATUS);
         if (!defaultRate) {
           throw new Error(`员工 ${w.name} 不存在或已禁用`);
         }
@@ -271,14 +267,14 @@ router.put('/:id', requireRole('cs', 'admin'), (req, res) => {
   }
 
   const priceChanged = price !== undefined && Number(price) !== Number(order.price);
-  const wasSettled = order.status === '已结单';
+  const wasSettled = order.status === ORDER_SETTLED_STATUS;
   const needRecalc = wasSettled && (priceChanged || workersChanged);
 
   if (needRecalc) {
     const affectedWorkers = new Set([...oldWorkers.map(w => w.worker_name), ...(newWorkerList ? newWorkerList.map(w => w.name) : [])]);
     const check = canOrderStatusChange(db, id);
     if (!check.ok) {
-      return res.status(400).json({ code: 1, data: null, message: '无法编辑已结单：' + check.message });
+      return badRequest(res, '无法编辑已结单：' + check.message);
     }
   }
 
@@ -336,9 +332,9 @@ router.put('/:id', requireRole('cs', 'admin'), (req, res) => {
       ? `${orderTag(order)}，${logChanges.join('，')}`
       : `${orderTag(order)}，无实际变更`;
     logAction('编辑订单', '订单管理', detail, req.user.username);
-    res.json({ code: 0, data: null, message: 'ok' });
+    success(res, null);
   } catch (e) {
-    res.status(400).json({ code: 1, data: null, message: e.message });
+    badRequest(res, e.message);
   }
 });
 
@@ -347,24 +343,20 @@ router.delete('/:id', requireRole('cs', 'admin'), (req, res) => {
   const db = getDb();
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
-    return res.status(404).json({ code: 1, data: null, message: '单据不存在' });
+    return notFound(res, '单据不存在');
   }
 
-  if (req.user.role === 'cs' && order.cs_name !== req.user.csName) {
-    return res.status(403).json({ code: 1, data: null, message: '无权操作他人订单' });
-  }
-
-  if (req.user.role === 'admin' && order.status === '已结单') {
-    return res.status(400).json({ code: 1, data: null, message: '管理员无法删除已结单订单' });
+  if (req.user.role === 'admin' && order.status === ORDER_SETTLED_STATUS) {
+    return badRequest(res, '管理员无法删除已结单订单');
   }
 
   const workers = db.prepare('SELECT worker_name FROM order_workers WHERE order_id = ?').all(id);
-  const wasSettled = order.status === '已结单';
+  const wasSettled = order.status === ORDER_SETTLED_STATUS;
 
   if (wasSettled && req.user.role === 'cs') {
     const check = canOrderStatusChange(db, id);
     if (!check.ok) {
-      return res.status(400).json({ code: 1, data: null, message: '无法删除已结单：' + check.message });
+      return badRequest(res, '无法删除已结单：' + check.message);
     }
   }
 
@@ -379,9 +371,9 @@ router.delete('/:id', requireRole('cs', 'admin'), (req, res) => {
   try {
     txn();
     logAction('删除订单', '订单管理', `${orderTag(order)}，状态：${order.status}，金额：¥${order.price}`, req.user.username);
-    res.json({ code: 0, data: null, message: 'ok' });
+    success(res, null);
   } catch (e) {
-    res.status(400).json({ code: 1, data: null, message: e.message });
+    badRequest(res, e.message);
   }
 });
 

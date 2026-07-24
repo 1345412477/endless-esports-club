@@ -19,8 +19,12 @@ function rowToObject(stmt) {
 
 function saveDb() {
   if (!db || !db.sqlDb) return;
-  const data = db.sqlDb.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
+  try {
+    const data = db.sqlDb.export();
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  } catch (err) {
+    console.error('[DB] Failed to save database:', err.message);
+  }
 }
 
 class StmtWrapper {
@@ -80,6 +84,16 @@ class DbWrapper {
   }
 
   _initTables() {
+    this.sqlDb.run(`
+      CREATE TABLE IF NOT EXISTS config_managers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      )
+    `);
     this.sqlDb.run(`
       CREATE TABLE IF NOT EXISTS config_cs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +175,27 @@ class DbWrapper {
       )
     `);
 
+    this._createIndexes();
     this._migrate();
+  }
+
+  _createIndexes() {
+    // 订单表索引
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_orders_cs_name ON orders(cs_name)');
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)');
+
+    // 订单员工关联表索引
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_order_workers_order_id ON order_workers(order_id)');
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_order_workers_worker_name ON order_workers(worker_name)');
+
+    // 结算表索引
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_settlements_person ON settlements(person_name, person_type)');
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_settlements_reversed ON settlements(reversed)');
+
+    // 操作日志表索引
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at ON operation_logs(created_at)');
+    this.sqlDb.run('CREATE INDEX IF NOT EXISTS idx_operation_logs_module ON operation_logs(module)');
   }
 
   _migrate() {
@@ -231,14 +265,25 @@ class DbWrapper {
   transaction(fn) {
     const self = this;
     return (...args) => {
-      self.sqlDb.run('BEGIN');
+      // 检查是否已在事务中（嵌套事务支持）
+      const inTransaction = self._inTransaction;
+      if (!inTransaction) {
+        self.sqlDb.run('BEGIN');
+        self._inTransaction = true;
+      }
       try {
         const result = fn(...args);
-        self.sqlDb.run('COMMIT');
-        saveDb();
+        if (!inTransaction) {
+          self.sqlDb.run('COMMIT');
+          self._inTransaction = false;
+          saveDb();
+        }
         return result;
       } catch (e) {
-        self.sqlDb.run('ROLLBACK');
+        if (!inTransaction) {
+          self.sqlDb.run('ROLLBACK');
+          self._inTransaction = false;
+        }
         throw e;
       }
     };

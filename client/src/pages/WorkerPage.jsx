@@ -4,18 +4,10 @@ import { api } from '../api/client'
 import { toast } from '../components/Toast'
 import Logo from '../components/Logo'
 import { Icon } from '../components/Icon'
+import { DEFAULT_PAGE_SIZE } from '../utils/constants'
+import { formatDate, formatMoney } from '../utils/helpers'
 
-const PAGE_SIZE = 5
-
-function formatDate(d) {
-  if (!d) return '-'
-  return d.slice(0, 16).replace('T', ' ')
-}
-
-function formatMoney(v) {
-  if (v == null) return '0'
-  return Number(v).toFixed(2)
-}
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 export default function WorkerPage() {
   const navigate = useNavigate()

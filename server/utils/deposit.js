@@ -1,4 +1,5 @@
 const { getDb } = require('../db');
+const { ROUND_TOLERANCE, ORDER_SETTLED_STATUS, WORKER_ACTIVE_STATUS } = require('./constants');
 
 function round2(v) {
   return Math.round((Number(v) + Number.EPSILON) * 100) / 100;
@@ -7,7 +8,7 @@ function round2(v) {
 // 累计工资 = 已结算 + 未结算 + 押金
 function getWorkerTotalSalary(db, workerName) {
   const settledRow = db.prepare(
-    "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0"
+    `SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0`
   ).get(workerName);
   const settledTotal = round2(settledRow.total);
 
@@ -22,19 +23,19 @@ function getWorkerTotalSalary(db, workerName) {
 
 function getWorkerSettledTotal(db, workerName) {
   const row = db.prepare(
-    "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0"
+    `SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0`
   ).get(workerName);
   return round2(row.total);
 }
 
-// 从订单计算员工的实际总工资
+// 从订单计算员工的实际总工资（仅统计已结单订单）
 function getWorkerOrderSalary(db, workerName) {
   const row = db.prepare(`
     SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
     FROM order_workers ow
     JOIN orders o ON ow.order_id = o.id
-    WHERE ow.worker_name = ? AND o.status = '已结单'
-  `).get(workerName);
+    WHERE ow.worker_name = ? AND o.status = ?
+  `).get(workerName, ORDER_SETTLED_STATUS);
   return round2(row.total);
 }
 
@@ -124,8 +125,32 @@ function canOrderStatusChange(db, orderId) {
   return { ok: true };
 }
 
+/**
+ * 计算订单押金贡献（超出基线的押金部分）
+ * @param {number} deposit - 当前押金
+ * @param {number} depositBase - 押金基线
+ * @returns {number} 订单押金贡献
+ */
+function calcDepositFromOrders(deposit, depositBase) {
+  return Math.max(0, round2(deposit || 0) - round2(depositBase || 0));
+}
+
+/**
+ * 计算待结算金额
+ * @param {number} orderSalary - 订单工资
+ * @param {number} manualUnsettled - 手动未结算
+ * @param {number} settledTotal - 已结算总额
+ * @param {number} depositFromOrders - 订单押金贡献
+ * @returns {number} 待结算金额
+ */
+function calcUnsettled(orderSalary, manualUnsettled, settledTotal, depositFromOrders) {
+  return round2(Math.max(0, orderSalary + manualUnsettled - settledTotal - depositFromOrders));
+}
+
 module.exports = {
   round2,
+  calcDepositFromOrders,
+  calcUnsettled,
   getWorkerTotalSalary,
   getWorkerSettledTotal,
   getWorkerOrderSalary,

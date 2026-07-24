@@ -1,6 +1,8 @@
 const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
+const { success } = require('../utils/response');
+const { round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
 
 const router = express.Router();
 
@@ -68,10 +70,6 @@ function fmtDate(d) {
   const min = String(d.getMinutes()).padStart(2, '0');
   const s = String(d.getSeconds()).padStart(2, '0');
   return `${y}-${m}-${day} ${h}:${min}:${s}`;
-}
-
-function round2(v) {
-  return Math.round((Number(v) + Number.EPSILON) * 100) / 100;
 }
 
 function calcSummary(db, start, end) {
@@ -184,7 +182,7 @@ function calcChange(curr, prev) {
   return round2(((curr - prev) / prev) * 100);
 }
 
-router.get('/dashboard', requireRole('admin'), (req, res) => {
+router.get('/dashboard', requireRole('admin', 'manager'), (req, res) => {
   const { dimension = 'day', date } = req.query;
   const db = getDb();
 
@@ -199,6 +197,15 @@ router.get('/dashboard', requireRole('admin'), (req, res) => {
   const type_distribution = calcTypeDistribution(db, start, end);
   const hourly_distribution = calcHourlyDistribution(db, start, end);
 
+  // Recent orders for the period
+  const recentOrders = db.prepare(`
+    SELECT id, serial_no, cs_name, order_type, customer_name, price, status, created_at
+    FROM orders
+    WHERE created_at >= ? AND created_at <= ?
+    ORDER BY created_at DESC
+    LIMIT 10
+  `).all(fmtDate(start), fmtDate(end));
+
   const changes = {
     total_amount: calcChange(summary.total_amount, prevSummary.total_amount),
     total_orders: calcChange(summary.total_orders, prevSummary.total_orders),
@@ -206,67 +213,81 @@ router.get('/dashboard', requireRole('admin'), (req, res) => {
     refund_orders: calcChange(summary.refund_orders, prevSummary.refund_orders),
   };
 
-  res.json({
-    code: 0,
-    data: {
-      label,
-      dimension,
-      summary,
-      prev_summary: prevSummary,
-      changes,
-      cs_ranking,
-      worker_ranking,
-      type_distribution,
-      hourly_distribution,
-    },
-    message: 'ok',
+  success(res, {
+    label,
+    dimension,
+    summary,
+    prev_summary: prevSummary,
+    changes,
+    cs_ranking,
+    worker_ranking,
+    type_distribution,
+    hourly_distribution,
+    orders: recentOrders,
   });
 });
 
 router.get('/settlement-stats', requireRole('admin'), (req, res) => {
   const db = getDb();
 
-  const workers = db.prepare('SELECT name, deposit, deposit_target, manual_unsettled, manual_deposit_base FROM config_workers').all();
-  const csList = db.prepare('SELECT name FROM config_cs').all();
+  // 优化：使用单次查询获取所有员工的汇总数据，避免 N+1 问题
+  const workerStats = db.prepare(`
+    SELECT
+      cw.name,
+      cw.deposit,
+      cw.manual_unsettled,
+      cw.manual_deposit_base,
+      COALESCE((
+        SELECT SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL))
+        FROM order_workers ow
+        JOIN orders o ON ow.order_id = o.id
+        WHERE ow.worker_name = cw.name AND o.status = '已结单'
+      ), 0) as order_salary,
+      COALESCE((
+        SELECT SUM(settled_amount)
+        FROM settlements
+        WHERE person_name = cw.name AND person_type = 'worker' AND reversed = 0
+      ), 0) as settled_total
+    FROM config_workers cw
+  `).all();
 
   let workerUnsettled = 0;
   let totalDeposit = 0;
 
-  for (const w of workers) {
-    totalDeposit += round2(w.deposit || 0);
-
-    const salRow = db.prepare(`
-      SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
-      FROM order_workers ow
-      JOIN orders o ON ow.order_id = o.id
-      WHERE ow.worker_name = ? AND o.status = '已结单'
-    `).get(w.name);
-    const totalSalary = round2(salRow.total || 0);
-
-    const setRow = db.prepare(
-      "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'worker' AND reversed = 0"
-    ).get(w.name);
-    const settled = round2(setRow.total || 0);
-
+  for (const w of workerStats) {
     const deposit = round2(w.deposit || 0);
+    totalDeposit += deposit;
+
+    const orderSalary = round2(w.order_salary || 0);
     const manualUnsettled = round2(w.manual_unsettled || 0);
+    const settled = round2(w.settled_total || 0);
     const depositBase = round2(w.manual_deposit_base || 0);
-    const depositFromOrders = Math.max(0, deposit - depositBase);
-    workerUnsettled += round2(Math.max(0, totalSalary + manualUnsettled - settled - depositFromOrders));
+    const depositFromOrders = calcDepositFromOrders(deposit, depositBase);
+
+    workerUnsettled += calcUnsettled(orderSalary, manualUnsettled, settled, depositFromOrders);
   }
 
+  // 优化：使用单次查询获取所有客服的汇总数据
+  const csStats = db.prepare(`
+    SELECT
+      cc.name,
+      COALESCE((
+        SELECT SUM(cs_commission_amount)
+        FROM orders
+        WHERE cs_name = cc.name AND status = '已结单'
+      ), 0) as total_commission,
+      COALESCE((
+        SELECT SUM(settled_amount)
+        FROM settlements
+        WHERE person_name = cc.name AND person_type = 'cs' AND reversed = 0
+      ), 0) as settled_total
+    FROM config_cs cc
+  `).all();
+
   let csUnsettled = 0;
-  for (const c of csList) {
-    const commRow = db.prepare(
-      "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
-    ).get(c.name);
-    const totalComm = round2(commRow.total || 0);
-
-    const setRow = db.prepare(
-      "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'cs' AND reversed = 0"
-    ).get(c.name);
-    const settled = round2(setRow.total || 0);
-
+  for (const c of csStats) {
+    const totalComm = round2(c.total_commission || 0);
+    const settled = round2(c.settled_total || 0);
     csUnsettled += round2(Math.max(0, totalComm - settled));
   }
 
@@ -279,15 +300,11 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
   ).get(monthStart, monthEnd);
   const monthSettled = round2(monthSettledRow.total || 0);
 
-  res.json({
-    code: 0,
-    data: {
-      worker_unsettled: round2(workerUnsettled),
-      cs_unsettled: round2(csUnsettled),
-      total_deposit: round2(totalDeposit),
-      month_settled: monthSettled,
-    },
-    message: 'ok',
+  success(res, {
+    worker_unsettled: round2(workerUnsettled),
+    cs_unsettled: round2(csUnsettled),
+    total_deposit: round2(totalDeposit),
+    month_settled: monthSettled,
   });
 });
 
@@ -308,10 +325,10 @@ router.get('/recent-orders', requireRole('admin'), (req, res) => {
     o.price = round2(o.price || 0);
   }
 
-  res.json({ code: 0, data: orders, message: 'ok' });
+  success(res, orders);
 });
 
-router.get('/trend', requireRole('admin'), (req, res) => {
+router.get('/trend', requireRole('admin', 'manager'), (req, res) => {
   const db = getDb();
   const days = Math.min(parseInt(req.query.days) || 7, 30);
 
@@ -344,7 +361,7 @@ router.get('/trend', requireRole('admin'), (req, res) => {
     });
   }
 
-  res.json({ code: 0, data: result, message: 'ok' });
+  success(res, result);
 });
 
 module.exports = router;

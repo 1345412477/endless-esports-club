@@ -4,20 +4,12 @@ import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
 import { toast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
+import { ORDER_STATUSES } from '../utils/constants'
+import { formatDate, formatMoney } from '../utils/helpers'
 
-const VALID_STATUSES = ['接单中', '已结单', '存单', '退单']
+const VALID_STATUSES = ORDER_STATUSES
 
-function formatDate(d) {
-  if (!d) return '-'
-  return d.slice(0, 16).replace('T', ' ')
-}
-
-function formatMoney(v) {
-  if (v == null) return '0'
-  return Number(v).toFixed(2)
-}
-
-const TABS = ['数据看板', '人员配置', '工资结算', '操作日志']
+const TABS = ['数据看板', '人员配置', '工资结算', '操作日志', '店长管理']
 
 export default function AdminPage() {
   const navigate = useNavigate()
@@ -65,6 +57,7 @@ export default function AdminPage() {
       {activeTab === '人员配置' && <PersonnelTab />}
       {activeTab === '工资结算' && <SettlementTab />}
       {activeTab === '操作日志' && <LogsTab />}
+      {activeTab === '店长管理' && <ManagerTab />}
     </div>
   )
 }
@@ -1123,7 +1116,7 @@ function PersonnelTab() {
   const [searchWorkerRating, setSearchWorkerRating] = useState('')
   const [csPage, setCsPage] = useState(1)
   const [workerPage, setWorkerPage] = useState(1)
-  const pageSize = 5
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const [editingRow, setEditingRow] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -1966,7 +1959,7 @@ function SettlementTab() {
   const [csSearch, setCsSearch] = useState('')
   const [editingCell, setEditingCell] = useState(null) // { personName, personType, field, recordId }
   const [editValue, setEditValue] = useState('')
-  const pageSize = 5
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -2735,7 +2728,7 @@ function LogsTab() {
   const [logs, setLogs] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(5)
+  const [pageSize] = useState(DEFAULT_PAGE_SIZE)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -2932,6 +2925,273 @@ function LogsTab() {
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+function ManagerTab() {
+  const [managerList, setManagerList] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [addForm, setAddForm] = useState({ name: '', username: '', password: '' })
+  const [addError, setAddError] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [editModal, setEditModal] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', username: '', password: '', active: true })
+  const [editError, setEditError] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
+  const loadManagers = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.get('/config/managers')
+      setManagerList(res.data || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadManagers()
+  }, [loadManagers])
+
+  const handleAdd = async (e) => {
+    e.preventDefault()
+    const trimmedName = addForm.name.trim()
+    const trimmedUsername = addForm.username.trim()
+    const trimmedPassword = addForm.password.trim()
+    if (!trimmedName) {
+      setAddError('请输入店长姓名')
+      return
+    }
+    if (!trimmedUsername) {
+      setAddError('请输入登录账号')
+      return
+    }
+    if (!trimmedPassword) {
+      setAddError('请输入登录密码')
+      return
+    }
+    setAddError('')
+    setAddLoading(true)
+    try {
+      await api.post('/config/managers', {
+        name: trimmedName,
+        username: trimmedUsername,
+        password: trimmedPassword,
+      })
+      setAddForm({ name: '', username: '', password: '' })
+      toast('店长添加成功', 'success')
+      await loadManagers()
+    } catch (err) {
+      setAddError(err.message)
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
+  const openEditModal = (m) => {
+    setEditModal(m)
+    setEditForm({ name: m.name, username: m.username, password: '', active: !!m.active })
+    setEditError('')
+  }
+
+  const handleEdit = async (e) => {
+    e.preventDefault()
+    const trimmedName = editForm.name.trim()
+    const trimmedUsername = editForm.username.trim()
+    if (!trimmedName) {
+      setEditError('请输入店长姓名')
+      return
+    }
+    if (!trimmedUsername) {
+      setEditError('请输入登录账号')
+      return
+    }
+    setEditError('')
+    setEditSaving(true)
+    try {
+      const payload = {
+        name: trimmedName,
+        username: trimmedUsername,
+        active: editForm.active,
+      }
+      if (editForm.password.trim()) {
+        payload.password = editForm.password.trim()
+      }
+      await api.put('/config/managers/' + editModal.id, payload)
+      toast('店长信息已更新', 'success')
+      setEditModal(null)
+      await loadManagers()
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    const confirmed = await confirm('确定要删除该店长吗？')
+    if (!confirmed) return
+    try {
+      await api.del('/config/managers/' + id)
+      toast('店长已删除', 'success')
+      await loadManagers()
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="card">
+        <h3 style={{ marginBottom: '16px' }}>添加店长</h3>
+        <form onSubmit={handleAdd} style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>姓名</label>
+            <input
+              type="text"
+              value={addForm.name}
+              onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+              placeholder="店长姓名"
+              style={{ width: '120px' }}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>登录账号</label>
+            <input
+              type="text"
+              value={addForm.username}
+              onChange={(e) => setAddForm({ ...addForm, username: e.target.value })}
+              placeholder="登录账号"
+              style={{ width: '150px' }}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>登录密码</label>
+            <input
+              type="password"
+              value={addForm.password}
+              onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+              placeholder="登录密码"
+              style={{ width: '150px' }}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={addLoading}>
+            {addLoading ? '添加中...' : '添加'}
+          </button>
+        </form>
+        {addError && <p className="error-text" style={{ marginTop: '8px' }}>{addError}</p>}
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: '16px' }}>店长列表</h3>
+        {loading ? (
+          <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '24px' }}>加载中...</p>
+        ) : error ? (
+          <p className="error-text" style={{ textAlign: 'center', padding: '24px' }}>{error}</p>
+        ) : managerList.length > 0 ? (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>登录账号</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {managerList.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.name}</td>
+                  <td>{m.username}</td>
+                  <td>
+                    <span className={`status-tag ${m.active ? 'status-active' : 'status-inactive'}`}>
+                      {m.active ? '启用' : '禁用'}
+                    </span>
+                  </td>
+                  <td>{formatDate(m.created_at)}</td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => openEditModal(m)}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleDelete(m.id)}
+                    >
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '24px' }}>
+            暂无店长账户
+          </p>
+        )}
+      </div>
+
+      {editModal && (
+        <div className="modal-overlay" onClick={() => setEditModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '420px' }}>
+            <div className="gradient-line" style={{ marginBottom: '20px' }} />
+            <h3 style={{ marginBottom: '20px', fontSize: '1.2rem' }}>编辑店长</h3>
+            <form onSubmit={handleEdit}>
+              <div className="form-group">
+                <label>姓名</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>登录账号</label>
+                <input
+                  type="text"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>新密码（留空则不修改）</label>
+                <input
+                  type="password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  placeholder="留空表示不修改密码"
+                />
+              </div>
+              <div className="form-group">
+                <label>状态</label>
+                <select
+                  value={editForm.active ? '1' : '0'}
+                  onChange={(e) => setEditForm({ ...editForm, active: e.target.value === '1' })}
+                >
+                  <option value="1">启用</option>
+                  <option value="0">禁用</option>
+                </select>
+              </div>
+              {editError && <p className="error-text">{editError}</p>}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" className="btn btn-outline" onClick={() => setEditModal(null)}>取消</button>
+                <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                  {editSaving ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

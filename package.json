@@ -11,9 +11,11 @@
     "start": "node server/index.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
     "sql.js": "^1.14.1"
   }

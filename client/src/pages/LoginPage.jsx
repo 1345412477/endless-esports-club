@@ -21,7 +21,8 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', { username, password, role });
       auth.login(res.data.token, role, username, res.data.displayName);
       toast('登录成功', 'success');
-      navigate(role === 'admin' ? '/admin' : '/cs');
+      const routeMap = { admin: '/admin', cs: '/cs', manager: '/manager' };
+      navigate(routeMap[role] || '/');
     } catch (err) {
       setError(err.message);
       toast(err.message, 'error');
@@ -61,6 +62,7 @@ export default function LoginPage() {
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="admin">管理员</option>
               <option value="cs">客服</option>
+              <option value="manager">店长</option>
             </select>
           </div>
           <div className="form-group">
