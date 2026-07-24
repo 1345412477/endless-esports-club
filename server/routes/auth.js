@@ -13,8 +13,11 @@ router.post('/login', async (req, res) => {
 
   if (role === 'admin') {
     const user = DEFAULT_USERS[username];
-    if (!user || user.password !== password || user.role !== role) {
-      return badRequest(res, '用户名或密码错误');
+    if (!user) {
+      return badRequest(res, '用户名错误');
+    }
+    if (user.password !== password) {
+      return badRequest(res, '密码错误');
     }
     const token = createToken(username, role, { csName: null });
     return success(res, { token, username, role, displayName: username });
@@ -26,11 +29,11 @@ router.post('/login', async (req, res) => {
       'SELECT name, username, password, active FROM config_cs WHERE username = ? AND username IS NOT NULL AND username != ?'
     ).get(username, '');
     if (!csRow) {
-      return badRequest(res, '用户名或密码错误');
+      return badRequest(res, '用户名错误');
     }
     const passwordValid = await verifyPassword(password, csRow.password);
     if (!passwordValid) {
-      return badRequest(res, '用户名或密码错误');
+      return badRequest(res, '密码错误');
     }
     if (!csRow.active) {
       return badRequest(res, '该账号已被禁用，请联系管理员');
@@ -45,11 +48,11 @@ router.post('/login', async (req, res) => {
       'SELECT name, username, password, active FROM config_managers WHERE username = ?'
     ).get(username);
     if (!managerRow) {
-      return badRequest(res, '用户名或密码错误');
+      return badRequest(res, '用户名错误');
     }
     const passwordValid = await verifyPassword(password, managerRow.password);
     if (!passwordValid) {
-      return badRequest(res, '用户名或密码错误');
+      return badRequest(res, '密码错误');
     }
     if (!managerRow.active) {
       return badRequest(res, '该账号已被禁用，请联系管理员');
