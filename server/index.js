@@ -19,17 +19,6 @@ async function main() {
   app.use(cors());
   app.use(express.json());
 
-  // 登录接口频率限制：15分钟内最多5次
-  const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    handler: (req, res) => {
-      res.status(429).json({ code: 1, data: null, message: '登录尝试过于频繁，请稍后再试' });
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-
   // 通用API频率限制：每分钟100次
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -57,7 +46,6 @@ async function main() {
   }, 30000);
 
   // 路由
-  app.use('/api/auth/login', loginLimiter);
   app.use('/api', apiLimiter);
 
   app.use('/api/auth', require('./routes/auth'));
