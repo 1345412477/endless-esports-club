@@ -173,8 +173,8 @@ export default function ManagerPage() {
       setWorkerList(workers)
       // 合并所有客服和员工为推荐人列表
       const people = [
-        ...cs.map(c => ({ name: c.name, _type: 'cs' })),
-        ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker' })),
+        ...cs.map(c => ({ name: c.name, _type: 'cs', default_deduction_rate: 0 })),
+        ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker', default_deduction_rate: 0 })),
       ]
       setAllPeople(people)
     }).catch(() => {})

@@ -313,8 +313,8 @@ function DashboardTab() {
       setCsList(cs)
       setTrend(tRes.data || [])
       const people = [
-        ...cs.map(c => ({ name: c.name, _type: 'cs' })),
-        ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker' })),
+        ...cs.map(c => ({ name: c.name, _type: 'cs', default_deduction_rate: 0 })),
+        ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker', default_deduction_rate: 0 })),
       ]
       setAllPeople(people)
     }).catch(() => {})
