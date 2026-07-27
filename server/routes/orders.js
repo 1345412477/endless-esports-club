@@ -369,7 +369,7 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   }
 });
 
-router.delete('/:id', requireRole('cs', 'admin'), (req, res) => {
+router.delete('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const { id } = req.params;
   const db = getDb();
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
