@@ -507,6 +507,12 @@ function DashboardTab() {
   const maxWorkerCount = workerRanking.length > 0 ? workerRanking[0].order_count : 0
   const maxTypeAmount = typeDist.length > 0 ? typeDist[0].amount : 0
 
+  // 订单类型分布分页
+  const [typeDistPage, setTypeDistPage] = useState(0)
+  const TYPE_DIST_PER_PAGE = 6
+  const typeDistTotalPages = Math.ceil(typeDist.length / TYPE_DIST_PER_PAGE)
+  const typeDistPageData = typeDist.slice(typeDistPage * TYPE_DIST_PER_PAGE, (typeDistPage + 1) * TYPE_DIST_PER_PAGE)
+
   const rankBadge = (i) => {
     const colors = ['#FFD700', '#C0C0C0', '#CD7F32']
     return (
@@ -700,34 +706,59 @@ function DashboardTab() {
                 {typeDist.length === 0 ? (
                   <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>暂无数据</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '8px 0' }}>
-                    {typeDist.map((t, i) => (
-                      <div key={t.type}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.88rem' }}>
-                          <span style={{ fontWeight: '500' }}>{t.type}</span>
-                          <span>
-                            <span style={{ color: 'var(--muted)', marginRight: '8px' }}>{t.count}单</span>
-                            <span style={{ color: 'var(--accent)', fontWeight: '600' }}>¥{formatMoney(t.amount)}</span>
-                            <span style={{ color: 'var(--muted)', marginLeft: '6px', fontSize: '0.78rem' }}>{t.percent}%</span>
-                          </span>
+                  <div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '8px 0' }}>
+                      {typeDistPageData.map((t, i) => (
+                        <div key={t.type}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.88rem' }}>
+                            <span style={{ fontWeight: '500' }}>{t.type}</span>
+                            <span>
+                              <span style={{ color: 'var(--muted)', marginRight: '8px' }}>{t.count}单</span>
+                              <span style={{ color: 'var(--accent)', fontWeight: '600' }}>¥{formatMoney(t.amount)}</span>
+                              <span style={{ color: 'var(--muted)', marginLeft: '6px', fontSize: '0.78rem' }}>{t.percent}%</span>
+                            </span>
+                          </div>
+                          <div style={{ height: '10px', background: 'var(--bg2)', borderRadius: '5px', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${t.percent}%`,
+                              background: [
+                                'linear-gradient(90deg, var(--accent), #22d3ee)',
+                                'linear-gradient(90deg, #a855f7, #c084fc)',
+                                'linear-gradient(90deg, #f59e0b, #fbbf24)',
+                                'linear-gradient(90deg, var(--success), #4ade80)',
+                                'linear-gradient(90deg, var(--danger), #f87171)',
+                              ][i % 5],
+                              borderRadius: '5px',
+                              transition: 'width 0.4s',
+                            }} />
+                          </div>
                         </div>
-                        <div style={{ height: '10px', background: 'var(--bg2)', borderRadius: '5px', overflow: 'hidden' }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${t.percent}%`,
-                            background: [
-                              'linear-gradient(90deg, var(--accent), #22d3ee)',
-                              'linear-gradient(90deg, #a855f7, #c084fc)',
-                              'linear-gradient(90deg, #f59e0b, #fbbf24)',
-                              'linear-gradient(90deg, var(--success), #4ade80)',
-                              'linear-gradient(90deg, var(--danger), #f87171)',
-                            ][i % 5],
-                            borderRadius: '5px',
-                            transition: 'width 0.4s',
-                          }} />
-                        </div>
+                      ))}
+                    </div>
+                    {typeDistTotalPages > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '8px 0', borderTop: '1px solid var(--rule)', marginTop: '8px' }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          disabled={typeDistPage === 0}
+                          onClick={() => setTypeDistPage(p => p - 1)}
+                          style={{ opacity: typeDistPage === 0 ? 0.4 : 1 }}
+                        >
+                          上一页
+                        </button>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                          {typeDistPage + 1} / {typeDistTotalPages}
+                        </span>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          disabled={typeDistPage >= typeDistTotalPages - 1}
+                          onClick={() => setTypeDistPage(p => p + 1)}
+                          style={{ opacity: typeDistPage >= typeDistTotalPages - 1 ? 0.4 : 1 }}
+                        >
+                          下一页
+                        </button>
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
