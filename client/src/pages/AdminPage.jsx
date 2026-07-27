@@ -84,9 +84,10 @@ function DashboardTab() {
   const [editError, setEditError] = useState('')
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [createModal, setCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ cs_name: '', order_type: '', customer_name: '', remark: '', price: '', workers: [{ name: '' }] })
+  const [createForm, setCreateForm] = useState({ cs_name: '', order_type: '', customer_name: '', remark: '', price: '', workers: [{ name: '' }], referrer_name: '', referrer_type: '' })
   const [createError, setCreateError] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
+  const [allPeople, setAllPeople] = useState([])
 
   const [dropdownOpen, setDropdownOpen] = useState(null)
   const [dropdownSearch, setDropdownSearch] = useState('')
@@ -306,9 +307,16 @@ function DashboardTab() {
       api.get('/config/cs'),
       api.get('/stats/trend?days=7'),
     ]).then(([wRes, cRes, tRes]) => {
-      setWorkerList(wRes.data || [])
-      setCsList((cRes.data || []).filter(c => c.active))
+      const workers = wRes.data || []
+      const cs = (cRes.data || []).filter(c => c.active)
+      setWorkerList(workers)
+      setCsList(cs)
       setTrend(tRes.data || [])
+      const people = [
+        ...cs.map(c => ({ name: c.name, _type: 'cs' })),
+        ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker' })),
+      ]
+      setAllPeople(people)
     }).catch(() => {})
   }, [])
 
@@ -338,7 +346,7 @@ function DashboardTab() {
 
   const openCreateModal = () => {
     setCreateModal(true)
-    setCreateForm({ cs_name: '', order_type: '', customer_name: '', remark: '', price: '', workers: [{ name: '' }] })
+    setCreateForm({ cs_name: '', order_type: '', customer_name: '', remark: '', price: '', workers: [{ name: '' }], referrer_name: '', referrer_type: '' })
     setCreateError('')
   }
 
@@ -383,6 +391,8 @@ function DashboardTab() {
         remark: createForm.remark.trim(),
         price: numPrice,
         workers: createForm.workers.map(w => ({ name: w.name.trim() })),
+        referrer_name: createForm.referrer_name || '',
+        referrer_type: createForm.referrer_type || '',
       })
       closeCreateModal()
       await loadOrders()
@@ -1042,6 +1052,33 @@ function DashboardTab() {
                       onChange={e => setCreateForm({ ...createForm, customer_name: e.target.value })}
                       placeholder="请输入客户名称"
                     />
+                  </div>
+                  <div className="form-group">
+                    <label>推荐人 <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.85rem' }}>(选填，提成3%)</span></label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        {renderSearchableSelect(
+                          createForm.referrer_name,
+                          (v) => {
+                            const person = allPeople.find(p => p.name === v)
+                            setCreateForm({ ...createForm, referrer_name: v, referrer_type: person ? person._type : '' })
+                          },
+                          allPeople,
+                          '请选择推荐人',
+                          'create-referrer'
+                        )}
+                      </div>
+                      {createForm.referrer_name && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setCreateForm({ ...createForm, referrer_name: '', referrer_type: '' })}
+                          style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}
+                        >
+                          清除
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="form-group">
                     <label>备注</label>
