@@ -227,7 +227,7 @@ router.put('/:id/status', requireRole('cs', 'admin', 'manager'), (req, res) => {
   }
 });
 
-router.put('/:id', requireRole('cs', 'admin'), (req, res) => {
+router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const { id } = req.params;
   const { order_type, customer_name, remark, price, workers } = req.body;
   const db = getDb();
