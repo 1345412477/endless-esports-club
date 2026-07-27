@@ -131,6 +131,10 @@ class DbWrapper {
         status TEXT NOT NULL DEFAULT '接单中',
         cs_commission_rate REAL DEFAULT 0.02,
         cs_commission_amount REAL NOT NULL,
+        referrer_name TEXT DEFAULT '',
+        referrer_type TEXT DEFAULT '',
+        referrer_rate REAL DEFAULT 0,
+        referrer_amount REAL DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now','localtime')),
         updated_at TEXT DEFAULT (datetime('now','localtime'))
       )
@@ -251,6 +255,18 @@ class DbWrapper {
           next_seq INTEGER DEFAULT 1
         )
       `);
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE orders ADD COLUMN referrer_name TEXT DEFAULT ''");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE orders ADD COLUMN referrer_type TEXT DEFAULT ''");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE orders ADD COLUMN referrer_rate REAL DEFAULT 0");
+    } catch (_) {}
+    try {
+      this.sqlDb.run("ALTER TABLE orders ADD COLUMN referrer_amount REAL DEFAULT 0");
     } catch (_) {}
   }
 

@@ -34,8 +34,8 @@ function orderTag(order) {
   return parts.join('，');
 }
 
-router.post('/', requireRole('cs', 'admin'), (req, res) => {
-  let { cs_name, order_type, customer_name, remark, price, workers } = req.body;
+router.post('/', requireRole('cs', 'admin', 'manager'), (req, res) => {
+  let { cs_name, order_type, customer_name, remark, price, workers, referrer_name, referrer_type } = req.body;
 
   if (req.user.role === 'cs') {
     cs_name = req.user.csName;
@@ -85,9 +85,35 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
   const csCommissionAmount = price * csCommissionRate;
   const workerCount = workers.length;
 
+  // 推荐人验证（选填）
+  let referrerRate = 0;
+  let referrerAmount = 0;
+  if (referrer_name && referrer_type) {
+    if (!['worker', 'cs'].includes(referrer_type)) {
+      return badRequest(res, '推荐人类型无效');
+    }
+    if (referrer_type === 'worker') {
+      const refWorker = db.prepare(
+        'SELECT name FROM config_workers WHERE name = ? AND status = ?'
+      ).get(referrer_name, WORKER_ACTIVE_STATUS);
+      if (!refWorker) {
+        return badRequest(res, '推荐员工不存在或已禁用');
+      }
+    } else {
+      const refCs = db.prepare(
+        'SELECT name FROM config_cs WHERE name = ? AND active = 1'
+      ).get(referrer_name);
+      if (!refCs) {
+        return badRequest(res, '推荐客服不存在或已禁用');
+      }
+    }
+    referrerRate = 0.03; // 默认3%
+    referrerAmount = price * referrerRate;
+  }
+
   const insertOrder = db.prepare(`
-    INSERT INTO orders (serial_no, cs_name, order_type, customer_name, remark, price, status, cs_commission_rate, cs_commission_amount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (serial_no, cs_name, order_type, customer_name, remark, price, status, cs_commission_rate, cs_commission_amount, referrer_name, referrer_type, referrer_rate, referrer_amount)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertWorker = db.prepare(`
     INSERT INTO order_workers (order_id, worker_name, deduction_rate, deduction_amount)
@@ -96,7 +122,11 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
 
   const txn = db.transaction(() => {
     const serialNo = generateSerialNo(db);
-    const result = insertOrder.run(serialNo, cs_name, order_type, customer_name || '', remark || '', price, '接单中', csCommissionRate, csCommissionAmount);
+    const result = insertOrder.run(
+      serialNo, cs_name, order_type, customer_name || '', remark || '', price, '接单中',
+      csCommissionRate, csCommissionAmount,
+      referrer_name || '', referrer_type || '', referrerRate, referrerAmount
+    );
     const orderId = result.lastInsertRowid;
 
     for (const w of workers) {
@@ -108,7 +138,8 @@ router.post('/', requireRole('cs', 'admin'), (req, res) => {
 
   const { orderId, serialNo } = txn();
   const customerPart = customer_name ? `，客户：${customer_name}` : '';
-  logAction('创建订单', '订单管理', `订单#${orderId}，流水号：${serialNo}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}`, req.user.username);
+  const referrerPart = referrer_name ? `，推荐人：${referrer_name}(${referrer_type === 'worker' ? '员工' : '客服'})，提成：¥${referrerAmount.toFixed(2)}` : '';
+  logAction('创建订单', '订单管理', `订单#${orderId}，流水号：${serialNo}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}${referrerPart}`, req.user.username);
   success(res, { id: orderId, serial_no: serialNo });
 });
 
