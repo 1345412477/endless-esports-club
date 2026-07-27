@@ -15,6 +15,10 @@ export default function CSPage() {
   const auth = useAuth()
 
   const [workerList, setWorkerList] = useState([])
+  const [csList, setCsList] = useState([])
+  const [allPeople, setAllPeople] = useState([])
+  const [referrerName, setReferrerName] = useState('')
+  const [referrerType, setReferrerType] = useState('')
 
   const [orderTypeName, setOrderTypeName] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -56,8 +60,19 @@ export default function CSPage() {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const workerRes = await api.get('/config/workers')
-        setWorkerList(workerRes.data || [])
+        const [workerRes, csRes] = await Promise.all([
+          api.get('/config/workers'),
+          api.get('/config/cs'),
+        ])
+        const workers = workerRes.data || []
+        const cs = (csRes.data || []).filter(c => c.active)
+        setWorkerList(workers)
+        setCsList(cs)
+        const people = [
+          ...cs.map(c => ({ name: c.name, _type: 'cs' })),
+          ...workers.filter(w => w.status === '在店').map(w => ({ name: w.name, _type: 'worker' })),
+        ]
+        setAllPeople(people)
       } catch (err) {
         setError(err.message)
       }
@@ -137,6 +152,8 @@ export default function CSPage() {
         price: numPrice,
         remark: remark.trim(),
         workers: validatedWorkers,
+        referrer_name: referrerName || '',
+        referrer_type: referrerType || '',
       })
       toast('订单创建成功', 'success')
       resetForm()
@@ -453,6 +470,36 @@ export default function CSPage() {
                 step="0.01"
                 required
               />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>推荐人 <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.85rem' }}>(选填，提成3%)</span></label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSearchableSelect(
+                    referrerName,
+                    (v) => {
+                      const person = allPeople.find(p => p.name === v)
+                      setReferrerName(v)
+                      setReferrerType(person ? person._type : '')
+                    },
+                    allPeople,
+                    '请选择推荐人',
+                    'referrer'
+                  )}
+                </div>
+                {referrerName && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => { setReferrerName(''); setReferrerType('') }}
+                    style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <div className="form-group">
