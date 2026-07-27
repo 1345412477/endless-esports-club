@@ -190,7 +190,7 @@ router.get('/', requireRole('cs', 'admin', 'manager'), (req, res) => {
   success(res, { list: orders, total: countRow.total, page: Number(page), size: Number(size) });
 });
 
-router.put('/:id/status', requireRole('cs', 'admin'), (req, res) => {
+router.put('/:id/status', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   if (!VALID_STATUSES.includes(status)) {

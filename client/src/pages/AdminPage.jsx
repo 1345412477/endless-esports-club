@@ -105,7 +105,7 @@ function DashboardTab() {
     return () => document.removeEventListener('mousedown', handler)
   }, [dropdownOpen])
 
-  const renderSearchableSelect = (value, onChange, options, placeholder, dropdownKey) => {
+  const renderSearchableSelect = (value, onChange, options, placeholder, dropdownKey, showDeduction = true) => {
     const isOpen = dropdownOpen === dropdownKey
     const filtered = options.filter(o =>
       o.name.toLowerCase().includes(dropdownSearch.toLowerCase())
@@ -202,7 +202,7 @@ function DashboardTab() {
                       if (value !== opt.name) e.target.style.background = 'transparent'
                     }}
                   >
-                    {opt.name}（{(opt.default_deduction_rate * 100).toFixed(0)}%抽成）
+                    {opt.name}{showDeduction && opt.default_deduction_rate !== undefined && `（${(opt.default_deduction_rate * 100).toFixed(0)}%抽成）`}
                   </div>
                 ))
               )}
@@ -1065,7 +1065,8 @@ function DashboardTab() {
                           },
                           allPeople,
                           '请选择推荐人',
-                          'create-referrer'
+                          'create-referrer',
+                          false
                         )}
                       </div>
                       {createForm.referrer_name && (
