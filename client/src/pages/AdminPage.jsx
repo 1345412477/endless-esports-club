@@ -1353,6 +1353,7 @@ function PersonnelTab() {
       default_deduction_rate_percent: ((w.default_deduction_rate != null ? w.default_deduction_rate : 0.20) * 100).toFixed(2),
       rating: w.rating || '',
       status: w.status || '在店',
+      deposit: w.deposit != null ? String(w.deposit) : '0',
       deposit_target: w.deposit_target != null ? String(w.deposit_target) : '0',
     })
     setEditError('')
@@ -1411,11 +1412,18 @@ function PersonnelTab() {
           setEditSaving(false)
           return
         }
+        const depositAmt = parseFloat(editForm.deposit)
+        if (isNaN(depositAmt) || depositAmt < 0) {
+          setEditError('押金不能为负数')
+          setEditSaving(false)
+          return
+        }
         await api.put('/config/workers/' + editingRow.id, {
           name: trimmed,
           default_deduction_rate: ratePercent / 100,
           rating: editForm.rating || '',
           status: editForm.status,
+          deposit: depositAmt,
           deposit_target: targetAmt,
         })
       }
@@ -1785,16 +1793,29 @@ function PersonnelTab() {
                           </div>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <label style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>押金目标(元)</label>
-                            <input
-                              type="number"
-                              value={editForm.deposit_target || '0'}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, deposit_target: e.target.value }))}
-                              min="0"
-                              step="0.01"
-                              style={{ width: '80px' }}
-                            />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <label style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>当前押金(元)</label>
+                              <input
+                                type="number"
+                                value={editForm.deposit || '0'}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, deposit: e.target.value }))}
+                                min="0"
+                                step="0.01"
+                                style={{ width: '80px' }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <label style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>押金目标(元)</label>
+                              <input
+                                type="number"
+                                value={editForm.deposit_target || '0'}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, deposit_target: e.target.value }))}
+                                min="0"
+                                step="0.01"
+                                style={{ width: '80px' }}
+                              />
+                            </div>
                           </div>
                         </td>
                         <td>
@@ -2022,6 +2043,10 @@ function SettlementTab() {
   const [historyPerson, setHistoryPerson] = useState(null)
   const [historyData, setHistoryData] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [depositModal, setDepositModal] = useState(null)
+  const [depositForm, setDepositForm] = useState({ deposit: '' })
+  const [depositError, setDepositError] = useState('')
+  const [depositSaving, setDepositSaving] = useState(false)
   const [workerPage, setWorkerPage] = useState(1)
   const [csPage, setCsPage] = useState(1)
   const [workerSearch, setWorkerSearch] = useState('')
@@ -2142,6 +2167,45 @@ function SettlementTab() {
   const closeHistory = () => {
     setHistoryPerson(null)
     setHistoryData([])
+  }
+
+  const openDepositModal = (worker) => {
+    setDepositModal(worker)
+    setDepositForm({ deposit: String(worker.deposit || 0) })
+    setDepositError('')
+  }
+
+  const closeDepositModal = () => {
+    setDepositModal(null)
+    setDepositForm({ deposit: '' })
+    setDepositError('')
+  }
+
+  const saveDeposit = async () => {
+    if (!depositModal) return
+    setDepositError('')
+    const depositAmt = parseFloat(depositForm.deposit)
+    if (isNaN(depositAmt) || depositAmt < 0) {
+      setDepositError('押金不能为负数')
+      return
+    }
+    setDepositSaving(true)
+    try {
+      await api.put('/settlement/worker-deposit', {
+        worker_name: depositModal.name,
+        deposit: depositAmt,
+      })
+      toast('押金已更新', 'success')
+      closeDepositModal()
+      await loadData()
+      if (historyPerson && historyPerson.name === depositModal.name && historyPerson.type === 'worker') {
+        await showHistory(depositModal.name, 'worker')
+      }
+    } catch (err) {
+      setDepositError(err.message)
+    } finally {
+      setDepositSaving(false)
+    }
   }
 
   if (loading) {
@@ -2286,6 +2350,12 @@ function SettlementTab() {
                             onClick={() => handleSettle(w.name, 'worker')}
                           >
                             {settleLoading[key] ? '结算中...' : '结算'}
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => openDepositModal(w)}
+                          >
+                            改押金
                           </button>
                           <button
                             className="btn btn-outline btn-sm"
@@ -2576,6 +2646,51 @@ function SettlementTab() {
                 暂无结算记录
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {depositModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={closeDepositModal}>
+          <div
+            style={{
+              background: 'var(--bg2)',
+              border: '1px solid var(--rule)',
+              borderRadius: '8px',
+              padding: '24px',
+              width: '400px',
+              maxWidth: '90vw',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: '16px' }}>修改押金 - {depositModal.name}</h3>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem' }}>当前押金 (元)</label>
+              <input
+                type="number"
+                value={depositForm.deposit}
+                onChange={e => setDepositForm(prev => ({ ...prev, deposit: e.target.value }))}
+                min="0"
+                step="0.01"
+                autoFocus
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--rule)', borderRadius: '4px', background: 'var(--bg)', color: 'var(--ink)', fontSize: '0.9rem' }}
+              />
+            </div>
+            {depositError && <div className="error-text" style={{ marginBottom: '12px' }}>{depositError}</div>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline btn-sm" onClick={closeDepositModal}>取消</button>
+              <button className="btn btn-primary btn-sm" onClick={saveDeposit} disabled={depositSaving}>
+                {depositSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
           </div>
         </div>
       )}

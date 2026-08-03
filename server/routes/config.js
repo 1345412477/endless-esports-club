@@ -321,6 +321,8 @@ router.put('/workers/:id', requireRole('admin'), (req, res) => {
     }
     updates.push('deposit = ?');
     params.push(depositAmt);
+    updates.push('manual_deposit_base = ?');
+    params.push(depositAmt);
     logChanges.push(`押金改为¥${depositAmt}`);
   }
   if (updates.length === 0) {
