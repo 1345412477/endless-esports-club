@@ -191,7 +191,7 @@ git -C "D:\endless-esports-club" checkout "%_target_ver_%" --force 2>&1
 if !errorlevel! neq 0 (
     call :print_err "Git 切换版本失败，请确认版本号 '%_target_ver_%' 是否存在"
     echo.
-    echo   可用版本列表:
+    echo   [可用版本列表]:
     git -C "D:\endless-esports-club" tag -l --sort=-version:refname
     exit /b 1
 )
