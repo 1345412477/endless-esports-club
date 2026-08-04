@@ -211,15 +211,11 @@ call :progress_bar 50 "后端依赖完成"
 
 call :print_info "安装前端依赖..."
 cd /d "D:\endless-esports-club\client"
-if not exist "node_modules" (
-    call npm install 2>&1
-    if !errorlevel! neq 0 (
-        call :print_err "前端依赖安装失败，请检查网络连接"
-        echo   尝试运行: cd /d "D:\endless-esports-club\client" ^&^& npm install
-        exit /b 1
-    )
-) else (
-    call :print_info "前端依赖已存在，跳过安装"
+call npm install 2>&1
+if !errorlevel! neq 0 (
+    call :print_err "前端依赖安装失败，请检查网络连接"
+    echo   尝试运行: cd /d "D:\endless-esports-club\client" ^&^& npm install
+    exit /b 1
 )
 call :print_ok "前端依赖就绪"
 call :progress_bar 65 "前端依赖完成"
