@@ -3,6 +3,7 @@ const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { success } = require('../utils/response');
 const { round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { WORKER_ACTIVE_STATUS } = require('../utils/constants');
 
 const router = express.Router();
 
@@ -249,7 +250,8 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
         WHERE person_name = cw.name AND person_type = 'worker' AND reversed = 0
       ), 0) as settled_total
     FROM config_workers cw
-  `).all();
+    WHERE cw.status = ?
+  `).all(WORKER_ACTIVE_STATUS);
 
   let workerUnsettled = 0;
   let totalDeposit = 0;

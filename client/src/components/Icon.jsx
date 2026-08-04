@@ -9,7 +9,8 @@ import {
   Settings, 
   Info, 
   CheckCircle, 
-  AlertCircle 
+  AlertCircle,
+  Printer
 } from 'lucide-react'
 
 export const Icon = {
@@ -24,4 +25,5 @@ export const Icon = {
   Info,
   CheckCircle,
   AlertCircle,
+  Printer,
 }

@@ -1,12 +1,12 @@
 const express = require('express');
 const { getDb } = require('../db');
 const { success, badRequest } = require('../utils/response');
-const { calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { calcDepositFromOrders, calcUnsettled, round2 } = require('../utils/deposit');
 
 const router = express.Router();
 
 router.get('/worker', (req, res) => {
-  const { name, page = 1, size = 20 } = req.query;
+  const { name, page = 1, size = 20, month, search, sort } = req.query;
   if (!name) {
     return badRequest(res, '请输入姓名');
   }
@@ -20,11 +20,35 @@ router.get('/worker', (req, res) => {
     return success(res, { type: null, message: '未找到该人员信息' });
   }
 
+  const sortMap = {
+    date_desc: 'o.created_at DESC',
+    date_asc: 'o.created_at ASC',
+    price_desc: 'o.price DESC',
+    price_asc: 'o.price ASC',
+    salary_desc: 'salary DESC',
+    salary_asc: 'salary ASC',
+  };
+  const orderBy = sortMap[sort] || sortMap.date_desc;
+
+  const extraWhere = [];
+  const extraParams = [];
+  if (month) {
+    extraWhere.push("strftime('%Y-%m', o.created_at) = ?");
+    extraParams.push(month);
+  }
+  if (search) {
+    extraWhere.push('(o.customer_name LIKE ? OR o.order_type LIKE ? OR o.cs_name LIKE ?)');
+    const like = `%${search}%`;
+    extraParams.push(like, like, like);
+  }
+  const extraClause = extraWhere.length > 0 ? ' AND ' + extraWhere.join(' AND ') : '';
+  const baseWhere = "ow.worker_name = ? AND o.status = '已结单'";
+
   const countRow = db.prepare(`
     SELECT COUNT(*) as total FROM order_workers ow
     JOIN orders o ON ow.order_id = o.id
-    WHERE ow.worker_name = ? AND o.status = '已结单'
-  `).get(name);
+    WHERE ${baseWhere}${extraClause}
+  `).get(name, ...extraParams);
 
   const orders = db.prepare(`
     SELECT o.id, o.order_type, o.customer_name, o.price, o.cs_name,
@@ -33,10 +57,27 @@ router.get('/worker', (req, res) => {
            CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL) as salary
     FROM order_workers ow
     JOIN orders o ON ow.order_id = o.id
-    WHERE ow.worker_name = ? AND o.status = '已结单'
-    ORDER BY o.created_at DESC
+    WHERE ${baseWhere}${extraClause}
+    ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
-  `).all(name, limit, offset);
+  `).all(name, ...extraParams, limit, offset);
+
+  const filteredAgg = db.prepare(`
+    SELECT
+      COUNT(*) as count,
+      COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as salary
+    FROM order_workers ow
+    JOIN orders o ON ow.order_id = o.id
+    WHERE ${baseWhere}${extraClause}
+  `).get(name, ...extraParams);
+
+  const months = db.prepare(`
+    SELECT DISTINCT strftime('%Y-%m', o.created_at) as m
+    FROM order_workers ow
+    JOIN orders o ON ow.order_id = o.id
+    WHERE ${baseWhere}
+    ORDER BY m DESC
+  `).all(name).map(r => r.m);
 
   const agg = db.prepare(`
     SELECT
@@ -78,6 +119,11 @@ router.get('/worker', (req, res) => {
       deposit_target: depositTarget,
       month_count: aggMonth.month_count,
     },
+    filtered_summary: {
+      count: filteredAgg.count || 0,
+      salary: round2(filteredAgg.salary || 0),
+    },
+    months,
     orders,
     settlements,
     total: countRow.total,
@@ -87,7 +133,7 @@ router.get('/worker', (req, res) => {
 });
 
 router.get('/cs', (req, res) => {
-  const { name, page = 1, size = 20 } = req.query;
+  const { name, page = 1, size = 20, month, search, sort } = req.query;
   if (!name) {
     return badRequest(res, '请输入姓名');
   }
@@ -101,17 +147,56 @@ router.get('/cs', (req, res) => {
     return success(res, { type: null, message: '未找到该人员信息' });
   }
 
+  const sortMap = {
+    date_desc: 'created_at DESC',
+    date_asc: 'created_at ASC',
+    price_desc: 'price DESC',
+    price_asc: 'price ASC',
+    salary_desc: 'cs_commission_amount DESC',
+    salary_asc: 'cs_commission_amount ASC',
+  };
+  const orderBy = sortMap[sort] || sortMap.date_desc;
+
+  const extraWhere = [];
+  const extraParams = [];
+  if (month) {
+    extraWhere.push("strftime('%Y-%m', created_at) = ?");
+    extraParams.push(month);
+  }
+  if (search) {
+    extraWhere.push('(customer_name LIKE ? OR order_type LIKE ?)');
+    const like = `%${search}%`;
+    extraParams.push(like, like);
+  }
+  const extraClause = extraWhere.length > 0 ? ' AND ' + extraWhere.join(' AND ') : '';
+  const baseWhere = "cs_name = ? AND status = '已结单'";
+
   const countRow = db.prepare(
-    "SELECT COUNT(*) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
-  ).get(name);
+    `SELECT COUNT(*) as total FROM orders WHERE ${baseWhere}${extraClause}`
+  ).get(name, ...extraParams);
 
   const orders = db.prepare(`
     SELECT id, order_type, customer_name, price, cs_commission_rate, cs_commission_amount, created_at
     FROM orders
-    WHERE cs_name = ? AND status = '已结单'
-    ORDER BY created_at DESC
+    WHERE ${baseWhere}${extraClause}
+    ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
-  `).all(name, limit, offset);
+  `).all(name, ...extraParams, limit, offset);
+
+  const filteredAgg = db.prepare(`
+    SELECT
+      COUNT(*) as count,
+      COALESCE(SUM(cs_commission_amount), 0) as salary
+    FROM orders
+    WHERE ${baseWhere}${extraClause}
+  `).get(name, ...extraParams);
+
+  const months = db.prepare(`
+    SELECT DISTINCT strftime('%Y-%m', created_at) as m
+    FROM orders
+    WHERE ${baseWhere}
+    ORDER BY m DESC
+  `).all(name).map(r => r.m);
 
   const agg = db.prepare(`
     SELECT
@@ -143,6 +228,11 @@ router.get('/cs', (req, res) => {
       unsettled: agg.total_salary - agg.settled_total,
       month_salary: aggMonth.month_salary,
     },
+    filtered_summary: {
+      count: filteredAgg.count || 0,
+      salary: round2(filteredAgg.salary || 0),
+    },
+    months,
     orders,
     settlements,
     total: countRow.total,

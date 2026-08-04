@@ -2,6 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { success } = require('../utils/response');
 const { calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { WORKER_ACTIVE_STATUS } = require('../utils/constants');
 
 const router = express.Router();
 
@@ -12,8 +13,9 @@ router.get('/workers/list', (req, res) => {
       COALESCE((SELECT SUM(s.settled_amount) FROM settlements s WHERE s.person_name = cw.name AND s.person_type = 'worker' AND s.reversed = 0), 0) as settled_total,
       COALESCE((SELECT SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)) FROM order_workers ow JOIN orders o ON ow.order_id = o.id WHERE ow.worker_name = cw.name AND o.status = '已结单'), 0) as order_salary
     FROM config_workers cw
+    WHERE cw.status = ?
     ORDER BY cw.name
-  `).all();
+  `).all(WORKER_ACTIVE_STATUS);
 
   for (const w of workers) {
     const settled = w.settled_total || 0;
