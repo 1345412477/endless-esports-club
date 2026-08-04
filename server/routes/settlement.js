@@ -2,7 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
-const { recalculateWorkerDeposit, getWorkerSettledTotal, getWorkerOrderSalary, round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { recalculateWorkerDeposit, getWorkerOrderSalary, round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
 const { PERSON_TYPE_WORKER, PERSON_TYPE_CS, PERSON_TYPE_DEPOSIT_REFUND, ROUND_TOLERANCE } = require('../utils/constants');
 const { success, badRequest, notFound } = require('../utils/response');
 
@@ -98,8 +98,12 @@ router.post('/deposit', requireRole('admin'), (req, res) => {
   }
 
   const txn = db.transaction(() => {
-    // 押金直接清零
-    db.prepare('UPDATE config_workers SET deposit = 0 WHERE name = ?').run(worker_name);
+    // 押金直接清零，并同步重置押金基线，避免后续自动回填
+    db.prepare('UPDATE config_workers SET deposit = 0, manual_deposit_base = 0 WHERE name = ?').run(worker_name);
+    // 记录一笔押金退还记录，供结算历史展示
+    db.prepare(
+      'INSERT INTO settlements (person_name, person_type, settled_amount, settled_by, remark) VALUES (?, ?, ?, ?, ?)'
+    ).run(worker_name, PERSON_TYPE_DEPOSIT_REFUND, currentDeposit, req.user.username, '押金全额退还');
   });
 
   try {
@@ -224,13 +228,19 @@ router.put('/adjust-settled', requireRole('admin'), (req, res) => {
   if (!person_name || !person_type || target_settled === undefined) {
     return badRequest(res, '缺少必填字段');
   }
+  if (![PERSON_TYPE_WORKER, PERSON_TYPE_CS].includes(person_type)) {
+    return badRequest(res, '人员类型无效');
+  }
   const targetSettled = round2(target_settled);
   if (targetSettled < 0) {
     return badRequest(res, '已结算金额不能为负数');
   }
 
   const db = getDb();
-  const currentSettled = getWorkerSettledTotal(db, person_name);
+  const currentSettledRow = db.prepare(
+    'SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = ? AND reversed = 0'
+  ).get(person_name, person_type);
+  const currentSettled = round2(currentSettledRow.total || 0);
   const diff = round2(targetSettled - currentSettled);
 
   if (diff === 0) {
@@ -278,6 +288,7 @@ router.put('/worker-unsettled', requireRole('admin'), (req, res) => {
 
   db.transaction(() => {
     db.prepare('UPDATE config_workers SET manual_unsettled = ? WHERE name = ?').run(unsettledAmt, worker_name);
+    recalculateWorkerDeposit(db, worker_name);
   })();
 
   logAction('修改未结算', '工资结算', `员工：${worker_name}，目标未结算：¥${unsettledAmt.toFixed(2)}`, req.user.username);

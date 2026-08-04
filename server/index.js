@@ -57,6 +57,11 @@ async function main() {
   app.use('/api/stats', authMiddleware, require('./routes/stats'));
   app.use('/api/logs', authMiddleware, require('./routes/logs'));
 
+  // 未匹配的 API 返回 JSON 404，避免落到前端 index.html
+  app.use('/api', (req, res) => {
+    res.status(404).json({ code: 1, data: null, message: '接口不存在' });
+  });
+
   // 静态文件（禁用缓存，确保前端更新立即生效）
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist, {

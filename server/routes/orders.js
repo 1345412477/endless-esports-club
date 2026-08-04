@@ -4,7 +4,7 @@ const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
 const { recalculateWorkersDeposit, canOrderStatusChange } = require('../utils/deposit');
 const { ORDER_STATUSES, ORDER_SETTLED_STATUS, WORKER_ACTIVE_STATUS, DEFAULT_CS_COMMISSION_RATE } = require('../utils/constants');
-const { success, badRequest, notFound, forbidden } = require('../utils/response');
+const { success, badRequest, notFound } = require('../utils/response');
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ const VALID_STATUSES = ORDER_STATUSES;
 function generateSerialNo(db) {
   const today = new Date();
   const year = today.getFullYear();
-  const month = today.getMonth() + 1; // no padding
+  const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   const dateKey = `${year}${month}${day}`;
   const prefix = `WJ${dateKey}`;
@@ -260,7 +260,14 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
 
   let newWorkerList = null;
   let workersChanged = false;
-  if (workers && Array.isArray(workers) && workers.length >= 1 && workers.length <= 2) {
+  if (workers !== undefined) {
+    if (!Array.isArray(workers) || workers.length < 1 || workers.length > 2) {
+      return badRequest(res, '关联员工数量为1-2人');
+    }
+    const names = workers.map(w => (w && w.name) || '');
+    if (new Set(names).size !== names.length) {
+      return badRequest(res, '员工不能重复');
+    }
     const oldNames = oldWorkers.map(w => w.worker_name).sort().join('、');
     const newNames = workers.map(w => w.name).sort().join('、');
     if (oldNames !== newNames) {
@@ -384,7 +391,7 @@ router.delete('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const workers = db.prepare('SELECT worker_name FROM order_workers WHERE order_id = ?').all(id);
   const wasSettled = order.status === ORDER_SETTLED_STATUS;
 
-  if (wasSettled && req.user.role === 'cs') {
+  if (wasSettled && req.user.role !== 'admin') {
     const check = canOrderStatusChange(db, id);
     if (!check.ok) {
       return badRequest(res, '无法删除已结单：' + check.message);

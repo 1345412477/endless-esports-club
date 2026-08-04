@@ -1,5 +1,5 @@
 const express = require('express');
-const { DEFAULT_USERS, createToken, verifyPassword } = require('../middleware/auth');
+const { DEFAULT_USERS, createToken, verifyPassword, authMiddleware } = require('../middleware/auth');
 const { getDb } = require('../db');
 const { success, badRequest } = require('../utils/response');
 
@@ -64,7 +64,7 @@ router.post('/login', async (req, res) => {
   return badRequest(res, '角色无效');
 });
 
-router.get('/verify', (req, res) => {
+router.get('/verify', authMiddleware, (req, res) => {
   const displayName = req.user.csName || req.user.managerName || req.user.username;
   success(res, { username: req.user.username, role: req.user.role, displayName });
 });

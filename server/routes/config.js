@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
@@ -18,7 +19,7 @@ router.get('/cs', requireRole('cs', 'admin', 'manager'), (req, res) => {
   success(res, list);
 });
 
-router.post('/cs', requireRole('admin'), (req, res) => {
+router.post('/cs', requireRole('admin'), async (req, res) => {
   const { name, commission_rate, username, password } = req.body;
   if (!name || !name.trim()) {
     return badRequest(res, '姓名不能为空');
@@ -50,8 +51,9 @@ router.post('/cs', requireRole('admin'), (req, res) => {
       return badRequest(res, '该登录账号已被使用');
     }
   }
+  const hashedPassword = loginPassword ? await bcrypt.hash(loginPassword, 10) : '';
   const result = db.prepare('INSERT INTO config_cs (name, commission_rate, username, password) VALUES (?, ?, ?, ?)').run(
-    name.trim(), rate, loginUsername, loginPassword
+    name.trim(), rate, loginUsername, hashedPassword
   );
   const logParts = [`客服：${name.trim()}`, `提成比例：${(rate * 100).toFixed(1)}%`];
   if (loginUsername) logParts.push(`登录账号：${loginUsername}`);
@@ -99,7 +101,7 @@ router.put('/cs/:id/toggle', requireRole('admin'), (req, res) => {
   success(res, null);
 });
 
-router.put('/cs/:id/password', requireRole('admin'), (req, res) => {
+router.put('/cs/:id/password', requireRole('admin'), async (req, res) => {
   const { username, password } = req.body;
   const db = getDb();
   const row = db.prepare('SELECT * FROM config_cs WHERE id = ?').get(req.params.id);
@@ -120,7 +122,8 @@ router.put('/cs/:id/password', requireRole('admin'), (req, res) => {
       return badRequest(res, '该登录账号已被使用');
     }
   }
-  db.prepare('UPDATE config_cs SET username = ?, password = ? WHERE id = ?').run(newUsername, newPassword, req.params.id);
+  const hashedPassword = newPassword ? await bcrypt.hash(newPassword, 10) : '';
+  db.prepare('UPDATE config_cs SET username = ?, password = ? WHERE id = ?').run(newUsername, hashedPassword, req.params.id);
   const logParts = [`客服：${row.name}`];
   if (newUsername) logParts.push(`登录账号：${newUsername}`);
   if (newPassword) logParts.push('密码已重置');
@@ -168,9 +171,26 @@ router.put('/cs/:id', requireRole('admin'), (req, res) => {
     return badRequest(res, '没有要更新的字段');
   }
   params.push(req.params.id);
-  db.prepare('UPDATE config_cs SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
-  logAction('编辑客服', '人员配置', `客服：${row.name}，${logChanges.join('，')}`, req.user.username);
-  success(res, null);
+  const oldName = row.name;
+  const newName = name !== undefined ? String(name).trim() : oldName;
+  const rename = newName !== oldName;
+
+  const txn = db.transaction(() => {
+    db.prepare('UPDATE config_cs SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
+    if (rename) {
+      db.prepare('UPDATE orders SET cs_name = ? WHERE cs_name = ?').run(newName, oldName);
+      db.prepare("UPDATE orders SET referrer_name = ? WHERE referrer_name = ? AND referrer_type = 'cs'").run(newName, oldName);
+      db.prepare("UPDATE settlements SET person_name = ? WHERE person_name = ? AND person_type = 'cs'").run(newName, oldName);
+    }
+  });
+
+  try {
+    txn();
+    logAction('编辑客服', '人员配置', `客服：${oldName}，${logChanges.join('，')}`, req.user.username);
+    success(res, null);
+  } catch (e) {
+    badRequest(res, e.message);
+  }
 });
 
 router.get('/workers', requireRole('cs', 'admin', 'manager'), (req, res) => {
@@ -329,13 +349,34 @@ router.put('/workers/:id', requireRole('admin'), (req, res) => {
     return badRequest(res, '没有要更新的字段');
   }
   params.push(req.params.id);
-  db.prepare('UPDATE config_workers SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
-  if (deposit_target !== undefined) {
-    const nameToRecalc = name !== undefined ? String(name).trim() : row.name;
-    recalculateWorkerDeposit(db, nameToRecalc);
+  const oldName = row.name;
+  const newName = name !== undefined ? String(name).trim() : oldName;
+  const rename = newName !== oldName;
+
+  const txn = db.transaction(() => {
+    db.prepare('UPDATE config_workers SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
+    if (rename) {
+      // 同步历史订单关联、结算记录与推荐人记录
+      db.prepare('UPDATE order_workers SET worker_name = ? WHERE worker_name = ?').run(newName, oldName);
+      db.prepare(
+        "UPDATE settlements SET person_name = ? WHERE person_name = ? AND person_type IN ('worker', 'deposit_refund')"
+      ).run(newName, oldName);
+      db.prepare(
+        "UPDATE orders SET referrer_name = ? WHERE referrer_name = ? AND referrer_type = 'worker'"
+      ).run(newName, oldName);
+    }
+    if (deposit_target !== undefined) {
+      recalculateWorkerDeposit(db, newName);
+    }
+  });
+
+  try {
+    txn();
+    logAction('编辑员工', '人员配置', `员工：${oldName}，${logChanges.join('，')}`, req.user.username);
+    success(res, null);
+  } catch (e) {
+    badRequest(res, e.message);
   }
-  logAction('编辑员工', '人员配置', `员工：${row.name}，${logChanges.join('，')}`, req.user.username);
-  success(res, null);
 });
 
 router.delete('/workers/:id', requireRole('admin'), (req, res) => {
