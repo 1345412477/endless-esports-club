@@ -273,7 +273,17 @@ export default function WorkerPage() {
       </header>
 
       {/* 顶部英雄区：动态封面 */}
-      <section className="home-hero" style={{ backgroundImage: 'url(/cover.gif)' }}>
+      <section className="home-hero">
+        <video
+          className="home-hero-video"
+          src="/cover.mp4"
+          poster="/cover-poster.jpg"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        />
         <div className="home-hero-overlay" />
         <span className="home-hud-corner tl" />
         <span className="home-hud-corner tr" />
