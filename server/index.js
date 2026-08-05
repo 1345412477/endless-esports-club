@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
 const { loadDb, setDb, saveDb } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
 const { startAutoBackup } = require('./utils/backup');
@@ -17,6 +18,7 @@ async function main() {
   const PORT = process.env.PORT || 3000;
 
   app.use(cors());
+  app.use(compression());
   app.use(express.json());
 
   // 通用API频率限制：每分钟100次

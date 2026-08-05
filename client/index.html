@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>无尽电竞业务系统</title>
-    <link rel="preload" as="image" href="/cover-poster.jpg" />
+    <link rel="preload" as="image" href="/cover-poster.jpg" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -19,9 +19,87 @@
         rel="stylesheet"
       />
     </noscript>
+    <style>
+      /* 首屏静态壳：React 挂载前先渲染 hero，提升 LCP */
+      .home-hero-static {
+        position: relative;
+        min-height: 480px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: #0d0914;
+      }
+      .home-hero-static-bg {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center 30%;
+      }
+      .home-hero-static-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(10, 6, 18, 0.42) 0%, rgba(10, 6, 18, 0.66) 58%, rgba(13, 9, 20, 0.96) 100%);
+      }
+      .home-hero-static-content {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        padding: 56px 20px;
+        max-width: 860px;
+        width: 100%;
+      }
+      .home-hero-static-content h1 {
+        font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+        font-size: 2.9rem;
+        letter-spacing: 6px;
+        margin: 0 0 8px;
+        color: #ff9ecb;
+      }
+      .home-hero-static-content p {
+        font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+        font-size: 1.05rem;
+        letter-spacing: 4px;
+        margin: 0;
+        color: rgba(255, 210, 232, 0.85);
+      }
+      .home-hero-static-search {
+        max-width: 660px;
+        margin: 32px auto 0;
+        padding: 14px 20px;
+        background: rgba(13, 9, 20, 0.66);
+        border: 1px solid rgba(255, 45, 120, 0.55);
+        border-radius: 999px;
+        color: rgba(224, 224, 240, 0.45);
+        font-size: 1.05rem;
+        text-align: left;
+      }
+      @media (max-width: 768px) {
+        .home-hero-static { min-height: 400px; }
+        .home-hero-static-content h1 { font-size: 1.9rem; letter-spacing: 3px; }
+        .home-hero-static-content p { font-size: 0.9rem; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="home-hero-static" id="home-shell">
+        <div class="home-hero-static-bg" style="background-image: url('/cover-poster.jpg')"></div>
+        <div class="home-hero-static-overlay"></div>
+        <div class="home-hero-static-content">
+          <h1>无尽电竞业务系统</h1>
+          <p>WJGame · 工资查询平台</p>
+          <div class="home-hero-static-search">输入员工 / 客服姓名查询...</div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // 非首页路径不需要 hero 静态壳，直接移除避免闪烁
+      if (window.location.pathname !== '/') {
+        var shell = document.getElementById('home-shell');
+        if (shell) shell.remove();
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
