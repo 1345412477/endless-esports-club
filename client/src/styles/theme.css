@@ -706,6 +706,7 @@ tbody tr:hover { background: rgba(26, 115, 232, 0.04); }
   justify-content: center;
   background-size: cover;
   background-position: center 30%;
+  background-color: var(--bg);
   border-bottom: 1px solid rgba(255, 45, 120, 0.35);
   overflow: hidden;
 }

@@ -273,7 +273,7 @@ export default function WorkerPage() {
       </header>
 
       {/* 顶部英雄区：动态封面 */}
-      <section className="home-hero">
+      <section className="home-hero" style={{ backgroundImage: 'url(/cover-poster.jpg)' }}>
         <video
           className="home-hero-video"
           src="/cover.mp4"

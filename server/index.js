@@ -65,10 +65,20 @@ async function main() {
   // 静态文件（禁用缓存，确保前端更新立即生效）
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist, {
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+    setHeaders: (res, filePath) => {
+      const normalized = filePath.replace(/\\/g, '/');
+      if (normalized.endsWith('/index.html')) {
+        // HTML 入口不缓存，保证每次拿到最新版本
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (normalized.includes('/assets/')) {
+        // 带哈希的构建产物可以永久缓存
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        // 封面视频/海报等静态资源缓存 1 天
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
     },
   }));
   app.get('*', (req, res) => {
