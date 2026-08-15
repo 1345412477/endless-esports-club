@@ -2,7 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { logAction } = require('../utils/logger');
-const { recalculateWorkerDeposit, getWorkerOrderSalary, round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { recalculateWorkerDeposit, getWorkerOrderSalary, round2, calcDepositFromOrders, calcUnsettled, getCsReferrerCommission } = require('../utils/deposit');
 const { PERSON_TYPE_WORKER, PERSON_TYPE_CS, PERSON_TYPE_DEPOSIT_REFUND, ROUND_TOLERANCE } = require('../utils/constants');
 const { success, badRequest, notFound } = require('../utils/response');
 
@@ -37,7 +37,9 @@ router.post('/', requireRole('admin'), (req, res) => {
     const row = db.prepare(
       "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
     ).get(person_name);
-    totalSalary = round2(row.total);
+    const baseCommission = round2(row.total);
+    const referrerCommission = getCsReferrerCommission(db, person_name);
+    totalSalary = round2(baseCommission + referrerCommission);
   }
 
   const settledRow = db.prepare(

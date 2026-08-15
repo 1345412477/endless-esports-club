@@ -223,17 +223,17 @@ export default function WorkerPage() {
   }
 
   const statCards = isWorker ? [
-    { label: '累计工资', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含押金', color: 'accent' },
+    { label: '累计工资', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含押金、含推荐提成', color: 'accent' },
     { label: '已结算', value: `¥${formatMoney(summary?.settled_total)}`, sub: '已发放', color: 'success' },
     { label: '未结算', value: `¥${formatMoney(summary?.unsettled)}`, sub: '待发放', color: 'warning' },
-    { label: '完成单数', value: String(summary?.completed_count || 0), sub: '累计已结单', color: 'plain' },
-    { label: month ? '筛选工资' : '本月', value: monthCard.value, sub: monthCard.sub, color: 'pink' },
+    { label: '推荐提成', value: `¥${formatMoney(summary?.referrer_commission)}`, sub: '累计推荐奖励', color: 'pink' },
+    { label: month ? '筛选工资' : '本月', value: monthCard.value, sub: monthCard.sub, color: 'plain' },
   ] : [
-    { label: '累计提成', value: `¥${formatMoney(summary?.total_salary)}`, sub: '已结单提成', color: 'accent' },
+    { label: '累计提成', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含推荐提成', color: 'accent' },
     { label: '已结算', value: `¥${formatMoney(summary?.settled_total)}`, sub: '已发放', color: 'success' },
     { label: '未结算', value: `¥${formatMoney(summary?.unsettled)}`, sub: '待发放', color: 'warning' },
-    { label: '完成单数', value: String(summary?.order_count || 0), sub: '累计已结单', color: 'plain' },
-    { label: month ? '筛选提成' : '本月提成', value: monthCard.value, sub: monthCard.sub, color: 'pink' },
+    { label: '推荐提成', value: `¥${formatMoney(summary?.referrer_commission)}`, sub: '累计推荐奖励', color: 'pink' },
+    { label: month ? '筛选提成' : '本月提成', value: monthCard.value, sub: monthCard.sub, color: 'plain' },
   ]
 
   const statColor = (c) => {
@@ -422,24 +422,32 @@ export default function WorkerPage() {
                   <thead>
                     <tr>
                       <th>时间</th>
+                      <th>收入类型</th>
                       <th>单子类型</th>
                       <th>客户</th>
                       <th>客服</th>
                       <th>单子价格</th>
-                      <th>{isWorker ? '本人工资' : '提成金额'}</th>
+                      <th>{isWorker ? '工资金额' : '提成金额'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {orders.length === 0 ? (
-                      <tr><td colSpan="6" className="home-table-empty">暂无符合条件的订单</td></tr>
+                      <tr><td colSpan="7" className="home-table-empty">暂无符合条件的订单</td></tr>
                     ) : orders.map((o) => (
-                      <tr key={o.id}>
+                      <tr key={`${o.id}-${o.is_referrer ? 'ref' : 'order'}`} className={o.is_referrer ? 'referrer-row' : ''}>
                         <td>{formatDate(o.created_at)}</td>
+                        <td>
+                          {o.is_referrer ? (
+                            <span className="home-tag referrer">推荐提成</span>
+                          ) : (
+                            <span className="home-tag order">{isWorker ? '接单工资' : '客服提成'}</span>
+                          )}
+                        </td>
                         <td>{o.order_type || '-'}</td>
                         <td>{o.customer_name || '-'}</td>
                         <td>{o.cs_name || '-'}</td>
                         <td>¥{formatMoney(o.price)}</td>
-                        <td className="home-salary-cell">¥{formatMoney(isWorker ? o.salary : o.cs_commission_amount)}</td>
+                        <td className="home-salary-cell">¥{formatMoney(o.salary)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -538,6 +546,7 @@ export default function WorkerPage() {
                     <thead>
                       <tr>
                         <th>时间</th>
+                        <th>收入类型</th>
                         <th>类型</th>
                         <th>客户</th>
                         <th>客服</th>
@@ -547,15 +556,16 @@ export default function WorkerPage() {
                     </thead>
                     <tbody>
                       {payslipData.orders.length === 0 ? (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px' }}>本期暂无订单</td></tr>
+                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px' }}>本期暂无订单</td></tr>
                       ) : payslipData.orders.map((o) => (
-                        <tr key={o.id}>
+                        <tr key={`${o.id}-${o.is_referrer ? 'ref' : 'order'}`} style={o.is_referrer ? { backgroundColor: 'rgba(236, 72, 153, 0.05)' } : {}}>
                           <td>{formatDate(o.created_at)}</td>
+                          <td>{o.is_referrer ? '推荐提成' : (isWorker ? '接单工资' : '客服提成')}</td>
                           <td>{o.order_type || '-'}</td>
                           <td>{o.customer_name || '-'}</td>
                           <td>{o.cs_name || '-'}</td>
                           <td>¥{formatMoney(o.price)}</td>
-                          <td>¥{formatMoney(isWorker ? o.salary : o.cs_commission_amount)}</td>
+                          <td>¥{formatMoney(o.salary)}</td>
                         </tr>
                       ))}
                     </tbody>

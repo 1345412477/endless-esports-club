@@ -28,7 +28,27 @@ function getWorkerSettledTotal(db, workerName) {
   return round2(row.total);
 }
 
-// 从订单计算员工的实际总工资（仅统计已结单订单）
+// 获取员工作为推荐人的提成总额（仅统计已结单订单）
+function getWorkerReferrerCommission(db, workerName) {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(referrer_amount), 0) as total
+    FROM orders
+    WHERE referrer_name = ? AND referrer_type = 'worker' AND status = ?
+  `).get(workerName, ORDER_SETTLED_STATUS);
+  return round2(row.total);
+}
+
+// 获取客服作为推荐人的提成总额（仅统计已结单订单）
+function getCsReferrerCommission(db, csName) {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(referrer_amount), 0) as total
+    FROM orders
+    WHERE referrer_name = ? AND referrer_type = 'cs' AND status = ?
+  `).get(csName, ORDER_SETTLED_STATUS);
+  return round2(row.total);
+}
+
+// 从订单计算员工的实际总工资（仅统计已结单订单，包含推荐人提成）
 function getWorkerOrderSalary(db, workerName) {
   const row = db.prepare(`
     SELECT COALESCE(SUM(CAST(o.price / (SELECT COUNT(*) FROM order_workers WHERE order_id = o.id) - ow.deduction_amount AS REAL)), 0) as total
@@ -36,7 +56,9 @@ function getWorkerOrderSalary(db, workerName) {
     JOIN orders o ON ow.order_id = o.id
     WHERE ow.worker_name = ? AND o.status = ?
   `).get(workerName, ORDER_SETTLED_STATUS);
-  return round2(row.total);
+  const orderSalary = round2(row.total);
+  const referrerCommission = getWorkerReferrerCommission(db, workerName);
+  return round2(orderSalary + referrerCommission);
 }
 
 function recalculateWorkerDeposit(db, workerName) {
@@ -98,7 +120,11 @@ function canOrderStatusChange(db, orderId) {
     const orderSalary = getWorkerOrderSalary(db, w.worker_name);
     const manualUnsettled = round2((db.prepare('SELECT manual_unsettled FROM config_workers WHERE name = ?').get(w.worker_name) || {}).manual_unsettled || 0);
     const settledTotal = getWorkerSettledTotal(db, w.worker_name);
-    const newAvailable = round2(orderSalary + manualUnsettled - orderWorkerSalary);
+    let deductAmount = orderWorkerSalary;
+    if (order.referrer_type === 'worker' && order.referrer_name === w.worker_name) {
+      deductAmount = round2(deductAmount + order.referrer_amount);
+    }
+    const newAvailable = round2(orderSalary + manualUnsettled - deductAmount);
     if (settledTotal > newAvailable + 0.01) {
       return {
         ok: false,
@@ -107,13 +133,57 @@ function canOrderStatusChange(db, orderId) {
     }
   }
 
-  const csTotalRow = db.prepare(
+  if (order.referrer_type === 'worker' && order.referrer_name) {
+    const isOrderWorker = workers.some(w => w.worker_name === order.referrer_name);
+    if (!isOrderWorker) {
+      const refOrderSalary = getWorkerOrderSalary(db, order.referrer_name);
+      const refManualUnsettled = round2((db.prepare('SELECT manual_unsettled FROM config_workers WHERE name = ?').get(order.referrer_name) || {}).manual_unsettled || 0);
+      const refSettledTotal = getWorkerSettledTotal(db, order.referrer_name);
+      const newRefAvailable = round2(refOrderSalary + refManualUnsettled - order.referrer_amount);
+      if (refSettledTotal > newRefAvailable + 0.01) {
+        return {
+          ok: false,
+          message: `员工【${order.referrer_name}】（推荐人）已结算金额(¥${refSettledTotal.toFixed(2)})超过回退后可用工资(¥${newRefAvailable.toFixed(2)})，请先撤销对应结算记录后再操作`,
+        };
+      }
+    }
+  }
+
+  const csBaseTotalRow = db.prepare(
     "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单' AND id != ?"
   ).get(order.cs_name, orderId);
+  let newCsTotal = round2(csBaseTotalRow.total);
+  let csReferrerExcludingCurrent = getCsReferrerCommissionExcludingOrder(db, order.cs_name, orderId);
+  if (order.referrer_type === 'cs' && order.referrer_name === order.cs_name) {
+    csReferrerExcludingCurrent = round2(csReferrerExcludingCurrent);
+  }
+  newCsTotal = round2(newCsTotal + csReferrerExcludingCurrent);
+
+  if (order.referrer_type === 'cs' && order.referrer_name) {
+    const refCsBaseRow = db.prepare(
+      "SELECT COALESCE(SUM(cs_commission_amount), 0) as total FROM orders WHERE cs_name = ? AND status = '已结单'"
+    ).get(order.referrer_name);
+    let refCsTotal = round2(refCsBaseRow.total);
+    let refCsReferrerExcluding = getCsReferrerCommissionExcludingOrder(db, order.referrer_name, orderId);
+    if (order.referrer_name === order.cs_name) {
+      refCsTotal = round2(csBaseTotalRow.total);
+    }
+    refCsTotal = round2(refCsTotal + refCsReferrerExcluding);
+    const refCsSettledRow = db.prepare(
+      "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'cs' AND reversed = 0"
+    ).get(order.referrer_name);
+    const refCsSettled = round2(refCsSettledRow.total);
+    if (refCsSettled > refCsTotal + 0.01) {
+      return {
+        ok: false,
+        message: `客服【${order.referrer_name}】（推荐人）已结算金额(¥${refCsSettled.toFixed(2)})超过回退后累计提成(¥${refCsTotal.toFixed(2)})，请先撤销对应结算记录后再操作`,
+      };
+    }
+  }
+
   const csSettledRow = db.prepare(
     "SELECT COALESCE(SUM(settled_amount), 0) as total FROM settlements WHERE person_name = ? AND person_type = 'cs' AND reversed = 0"
   ).get(order.cs_name);
-  const newCsTotal = round2(csTotalRow.total);
   const csSettled = round2(csSettledRow.total);
   if (csSettled > newCsTotal + 0.01) {
     return {
@@ -123,6 +193,15 @@ function canOrderStatusChange(db, orderId) {
   }
 
   return { ok: true };
+}
+
+function getCsReferrerCommissionExcludingOrder(db, csName, excludeOrderId) {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(referrer_amount), 0) as total
+    FROM orders
+    WHERE referrer_name = ? AND referrer_type = 'cs' AND status = '已结单' AND id != ?
+  `).get(csName, excludeOrderId);
+  return round2(row.total);
 }
 
 /**
@@ -154,6 +233,8 @@ module.exports = {
   getWorkerTotalSalary,
   getWorkerSettledTotal,
   getWorkerOrderSalary,
+  getWorkerReferrerCommission,
+  getCsReferrerCommission,
   recalculateWorkerDeposit,
   recalculateWorkersDeposit,
   canOrderStatusChange,

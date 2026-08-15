@@ -1,7 +1,7 @@
 const express = require('express');
 const { getDb } = require('../db');
 const { success } = require('../utils/response');
-const { calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { calcDepositFromOrders, calcUnsettled, round2, getWorkerReferrerCommission, getCsReferrerCommission } = require('../utils/deposit');
 const { WORKER_ACTIVE_STATUS } = require('../utils/constants');
 
 const router = express.Router();
@@ -20,11 +20,13 @@ router.get('/workers/list', (req, res) => {
   for (const w of workers) {
     const settled = w.settled_total || 0;
     const orderSalary = w.order_salary || 0;
+    const referrerCommission = getWorkerReferrerCommission(db, w.name);
     const manualUnsettled = w.manual_unsettled || 0;
     const deposit = w.deposit || 0;
     const depositBase = w.manual_deposit_base || 0;
     const depositFromOrders = calcDepositFromOrders(deposit, depositBase);
-    w.unsettled = calcUnsettled(orderSalary, manualUnsettled, settled, depositFromOrders);
+    w.referrer_commission = referrerCommission;
+    w.unsettled = calcUnsettled(round2(orderSalary + referrerCommission), manualUnsettled, settled, depositFromOrders);
     w.total_salary = settled + w.unsettled + deposit;
   }
   success(res, workers);
@@ -34,14 +36,17 @@ router.get('/cs/list', (req, res) => {
   const db = getDb();
   const csList = db.prepare(`
     SELECT cc.id, cc.name, cc.active,
-      COALESCE((SELECT SUM(cs_commission_amount) FROM orders WHERE cs_name = cc.name AND status = '已结单'), 0) as total_salary,
+      COALESCE((SELECT SUM(cs_commission_amount) FROM orders WHERE cs_name = cc.name AND status = '已结单'), 0) as base_commission,
       COALESCE((SELECT SUM(s.settled_amount) FROM settlements s WHERE s.person_name = cc.name AND s.person_type = 'cs' AND s.reversed = 0), 0) as settled_total
     FROM config_cs cc
     ORDER BY cc.name
   `).all();
 
   for (const c of csList) {
-    c.unsettled = c.total_salary - c.settled_total;
+    const referrerCommission = getCsReferrerCommission(db, c.name);
+    c.referrer_commission = referrerCommission;
+    c.total_salary = round2((c.base_commission || 0) + referrerCommission);
+    c.unsettled = round2(Math.max(0, c.total_salary - c.settled_total));
   }
   success(res, csList);
 });

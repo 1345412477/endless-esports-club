@@ -2235,6 +2235,10 @@ function SettlementTab() {
             <div className="stat-label">客服待结算总额</div>
             <div className="stat-value" style={{ color: 'var(--accent)', fontSize: '1.4rem' }}>¥{formatMoney(settleStats.cs_unsettled)}</div>
           </div>
+          <div className="stat-card" style={{ borderLeft: '3px solid #ec4899' }}>
+            <div className="stat-label">累计推荐提成</div>
+            <div className="stat-value" style={{ color: '#ec4899', fontSize: '1.4rem' }}>¥{formatMoney(settleStats.total_referrer)}</div>
+          </div>
           <div className="stat-card" style={{ borderLeft: '3px solid var(--danger)' }}>
             <div className="stat-label">押金池总额</div>
             <div className="stat-value" style={{ color: 'var(--danger)', fontSize: '1.4rem' }}>¥{formatMoney(settleStats.total_deposit)}</div>
@@ -2276,6 +2280,7 @@ function SettlementTab() {
                   <tr>
                     <th>员工</th>
                     <th>累计工资</th>
+                    <th>推荐提成</th>
                     <th>已结算</th>
                     <th>未结算</th>
                     <th>押金</th>
@@ -2290,6 +2295,9 @@ function SettlementTab() {
                     <tr key={w.name}>
                       <td>{w.name}</td>
                       <td>¥{formatMoney(w.total_salary)}</td>
+                      <td style={{ color: '#ec4899', fontWeight: '500' }}>
+                        {(w.referrer_commission || 0) > 0 ? `¥${formatMoney(w.referrer_commission)}` : '-'}
+                      </td>
                       <td style={{ color: 'var(--success)' }}>
                         ¥{formatMoney(w.settled_total)}
                       </td>
@@ -2437,6 +2445,7 @@ function SettlementTab() {
                   <tr>
                     <th>客服</th>
                     <th>累计提成</th>
+                    <th>推荐提成</th>
                     <th>已结算</th>
                     <th>未结算</th>
                     <th>结算金额</th>
@@ -2450,6 +2459,9 @@ function SettlementTab() {
                     <tr key={c.name}>
                       <td>{c.name}</td>
                       <td>¥{formatMoney(c.total_salary)}</td>
+                      <td style={{ color: '#ec4899', fontWeight: '500' }}>
+                        {(c.referrer_commission || 0) > 0 ? `¥${formatMoney(c.referrer_commission)}` : '-'}
+                      </td>
                       <td style={{ color: 'var(--success)' }}>
                         ¥{formatMoney(c.settled_total)}
                       </td>

@@ -229,7 +229,7 @@ router.put('/:id/status', requireRole('cs', 'admin', 'manager'), (req, res) => {
 
 router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   const { id } = req.params;
-  const { order_type, customer_name, remark, price, workers } = req.body;
+  const { order_type, customer_name, remark, price, workers, referrer_name, referrer_type } = req.body;
   const db = getDb();
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
@@ -256,6 +256,54 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   }
   if (price !== undefined && Number(price) !== Number(order.price)) {
     logChanges.push(`金额：¥${order.price} → ¥${price}`);
+  }
+
+  let referrerChanged = false;
+  let newReferrerName = order.referrer_name;
+  let newReferrerType = order.referrer_type;
+  let newReferrerRate = order.referrer_rate;
+  let newReferrerAmount = order.referrer_amount;
+  if (referrer_name !== undefined || referrer_type !== undefined) {
+    const finalReferrerName = referrer_name !== undefined ? referrer_name : order.referrer_name;
+    const finalReferrerType = referrer_type !== undefined ? referrer_type : order.referrer_type;
+    
+    if (finalReferrerName && finalReferrerType) {
+      if (!['worker', 'cs'].includes(finalReferrerType)) {
+        return badRequest(res, '推荐人类型无效');
+      }
+      if (finalReferrerType === 'worker') {
+        const refWorker = db.prepare(
+          'SELECT name FROM config_workers WHERE name = ? AND status = ?'
+        ).get(finalReferrerName, WORKER_ACTIVE_STATUS);
+        if (!refWorker) {
+          return badRequest(res, '推荐员工不存在或已禁用');
+        }
+      } else {
+        const refCs = db.prepare(
+          'SELECT name FROM config_cs WHERE name = ? AND active = 1'
+        ).get(finalReferrerName);
+        if (!refCs) {
+          return badRequest(res, '推荐客服不存在或已禁用');
+        }
+      }
+      newReferrerName = finalReferrerName;
+      newReferrerType = finalReferrerType;
+      newReferrerRate = 0.03;
+      const finalPrice = price !== undefined ? price : order.price;
+      newReferrerAmount = finalPrice * newReferrerRate;
+    } else {
+      newReferrerName = '';
+      newReferrerType = '';
+      newReferrerRate = 0;
+      newReferrerAmount = 0;
+    }
+    
+    if (newReferrerName !== order.referrer_name || newReferrerType !== order.referrer_type) {
+      const oldRef = order.referrer_name ? `${order.referrer_name}(${order.referrer_type === 'worker' ? '员工' : '客服'})` : '无';
+      const newRef = newReferrerName ? `${newReferrerName}(${newReferrerType === 'worker' ? '员工' : '客服'})` : '无';
+      logChanges.push(`推荐人：${oldRef} → ${newRef}`);
+      referrerChanged = true;
+    }
   }
 
   let newWorkerList = null;
@@ -306,10 +354,9 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
 
   const priceChanged = price !== undefined && Number(price) !== Number(order.price);
   const wasSettled = order.status === ORDER_SETTLED_STATUS;
-  const needRecalc = wasSettled && (priceChanged || workersChanged);
+  const needRecalc = wasSettled && (priceChanged || workersChanged || referrerChanged);
 
   if (needRecalc) {
-    const affectedWorkers = new Set([...oldWorkers.map(w => w.worker_name), ...(newWorkerList ? newWorkerList.map(w => w.name) : [])]);
     const check = canOrderStatusChange(db, id);
     if (!check.ok) {
       return badRequest(res, '无法编辑已结单：' + check.message);
@@ -340,6 +387,17 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
       const csAmount = price * order.cs_commission_rate;
       updates.push('cs_commission_amount = ?');
       updateParams.push(csAmount);
+      newReferrerAmount = price * newReferrerRate;
+    }
+    if (referrerChanged || priceChanged) {
+      updates.push('referrer_name = ?');
+      updateParams.push(newReferrerName);
+      updates.push('referrer_type = ?');
+      updateParams.push(newReferrerType);
+      updates.push('referrer_rate = ?');
+      updateParams.push(newReferrerRate);
+      updates.push('referrer_amount = ?');
+      updateParams.push(newReferrerAmount);
     }
     updates.push("updated_at = datetime('now','localtime')");
     updateParams.push(id);
@@ -360,6 +418,12 @@ router.put('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
     if (needRecalc) {
       const affectedWorkers = new Set([...oldWorkers.map(w => w.worker_name)]);
       if (newWorkerList) newWorkerList.forEach(w => affectedWorkers.add(w.name));
+      if (order.referrer_type === 'worker' && order.referrer_name) {
+        affectedWorkers.add(order.referrer_name);
+      }
+      if (newReferrerType === 'worker' && newReferrerName) {
+        affectedWorkers.add(newReferrerName);
+      }
       recalculateWorkersDeposit(db, [...affectedWorkers]);
     }
   });
@@ -399,10 +463,14 @@ router.delete('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
   }
 
   const txn = db.transaction(() => {
+    const affectedWorkers = new Set(workers.map(w => w.worker_name));
+    if (order.referrer_type === 'worker' && order.referrer_name) {
+      affectedWorkers.add(order.referrer_name);
+    }
     db.prepare('DELETE FROM order_workers WHERE order_id = ?').run(id);
     db.prepare('DELETE FROM orders WHERE id = ?').run(id);
     if (wasSettled) {
-      recalculateWorkersDeposit(db, workers.map(w => w.worker_name));
+      recalculateWorkersDeposit(db, [...affectedWorkers]);
     }
   });
 

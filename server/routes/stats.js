@@ -2,7 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { requireRole } = require('../middleware/auth');
 const { success } = require('../utils/response');
-const { round2, calcDepositFromOrders, calcUnsettled } = require('../utils/deposit');
+const { round2, calcDepositFromOrders, calcUnsettled, getWorkerReferrerCommission, getCsReferrerCommission } = require('../utils/deposit');
 const { WORKER_ACTIVE_STATUS } = require('../utils/constants');
 
 const router = express.Router();
@@ -255,18 +255,21 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
 
   let workerUnsettled = 0;
   let totalDeposit = 0;
+  let totalWorkerReferrer = 0;
 
   for (const w of workerStats) {
     const deposit = round2(w.deposit || 0);
     totalDeposit += deposit;
 
     const orderSalary = round2(w.order_salary || 0);
+    const referrerCommission = getWorkerReferrerCommission(db, w.name);
+    totalWorkerReferrer += referrerCommission;
     const manualUnsettled = round2(w.manual_unsettled || 0);
     const settled = round2(w.settled_total || 0);
     const depositBase = round2(w.manual_deposit_base || 0);
     const depositFromOrders = calcDepositFromOrders(deposit, depositBase);
 
-    workerUnsettled += calcUnsettled(orderSalary, manualUnsettled, settled, depositFromOrders);
+    workerUnsettled += calcUnsettled(round2(orderSalary + referrerCommission), manualUnsettled, settled, depositFromOrders);
   }
 
   // 优化：使用单次查询获取所有客服的汇总数据
@@ -287,8 +290,12 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
   `).all();
 
   let csUnsettled = 0;
+  let totalCsReferrer = 0;
   for (const c of csStats) {
-    const totalComm = round2(c.total_commission || 0);
+    const baseComm = round2(c.total_commission || 0);
+    const referrerCommission = getCsReferrerCommission(db, c.name);
+    totalCsReferrer += referrerCommission;
+    const totalComm = round2(baseComm + referrerCommission);
     const settled = round2(c.settled_total || 0);
     csUnsettled += round2(Math.max(0, totalComm - settled));
   }
@@ -307,6 +314,7 @@ router.get('/settlement-stats', requireRole('admin'), (req, res) => {
     cs_unsettled: round2(csUnsettled),
     total_deposit: round2(totalDeposit),
     month_settled: monthSettled,
+    total_referrer: round2(totalWorkerReferrer + totalCsReferrer),
   });
 });
 

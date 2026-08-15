@@ -6,6 +6,7 @@ const compression = require('compression');
 const { loadDb, setDb, saveDb } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
 const { startAutoBackup } = require('./utils/backup');
+const { recalculateWorkersDeposit } = require('./utils/deposit');
 
 async function main() {
   const db = await loadDb();
@@ -13,6 +14,30 @@ async function main() {
 
   const { seed } = require('./seed');
   seed();
+
+  // 启动时重算所有在店员工押金（确保推荐提成等新逻辑生效后押金正确）
+  try {
+    const workers = db.prepare("SELECT name FROM config_workers WHERE status = '在店'").all();
+    const workerNames = workers.map(w => w.name);
+    if (workerNames.length > 0) {
+      const results = recalculateWorkersDeposit(db, workerNames);
+      let updatedCount = 0;
+      for (const [name, result] of Object.entries(results)) {
+        if (result.added !== 0) {
+          updatedCount++;
+          console.log(`[Migration] 员工【${name}】押金重算：¥${result.deposit.toFixed(2)}（目标 ¥${result.deposit_target.toFixed(2)}）`);
+        }
+      }
+      if (updatedCount > 0) {
+        saveDb();
+        console.log(`[Migration] 押金重算完成，共更新 ${updatedCount} 名员工押金`);
+      } else {
+        console.log('[Migration] 押金状态正常，无需更新');
+      }
+    }
+  } catch (err) {
+    console.error('[Migration] 押金重算失败：', err.message);
+  }
 
   const app = express();
   const PORT = process.env.PORT || 3000;
