@@ -223,16 +223,14 @@ export default function WorkerPage() {
   }
 
   const statCards = isWorker ? [
-    { label: '累计工资', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含押金、含推荐提成', color: 'accent' },
+    { label: '累计工资', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含押金', color: 'accent' },
     { label: '已结算', value: `¥${formatMoney(summary?.settled_total)}`, sub: '已发放', color: 'success' },
     { label: '未结算', value: `¥${formatMoney(summary?.unsettled)}`, sub: '待发放', color: 'warning' },
-    { label: '推荐提成', value: `¥${formatMoney(summary?.referrer_commission)}`, sub: '累计推荐奖励', color: 'pink' },
     { label: month ? '筛选工资' : '本月', value: monthCard.value, sub: monthCard.sub, color: 'plain' },
   ] : [
-    { label: '累计提成', value: `¥${formatMoney(summary?.total_salary)}`, sub: '含推荐提成', color: 'accent' },
+    { label: '累计提成', value: `¥${formatMoney(summary?.total_salary)}`, sub: '', color: 'accent' },
     { label: '已结算', value: `¥${formatMoney(summary?.settled_total)}`, sub: '已发放', color: 'success' },
     { label: '未结算', value: `¥${formatMoney(summary?.unsettled)}`, sub: '待发放', color: 'warning' },
-    { label: '推荐提成', value: `¥${formatMoney(summary?.referrer_commission)}`, sub: '累计推荐奖励', color: 'pink' },
     { label: month ? '筛选提成' : '本月提成', value: monthCard.value, sub: monthCard.sub, color: 'plain' },
   ]
 

@@ -13,6 +13,15 @@ export function formatDate(d) {
 }
 
 /**
+ * 四舍五入保留两位小数
+ * @param {number} v - 数值
+ * @returns {number} 保留两位小数的数值
+ */
+export function round2(v) {
+  return Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+}
+
+/**
  * 格式化金额数值
  * @param {number|string} v - 金额值
  * @returns {string} 格式化后的金额字符串，保留两位小数
