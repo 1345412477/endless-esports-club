@@ -184,10 +184,16 @@ if !errorlevel! neq 0 (
 call :progress_bar 15 "备份完成"
 
 call :print_info "切换到版本 %_target_ver_%..."
-if not "%_target_ver_%"=="latest" (
-    git -C "D:\endless-esports-club" fetch --tags "%GIT_REMOTE%" 2>&1
+git -C "D:\endless-esports-club" fetch "%GIT_REMOTE%" --tags --force 2>&1
+if !errorlevel! neq 0 (
+    call :print_err "拉取远程代码失败，请检查网络连接"
+    exit /b 1
 )
-git -C "D:\endless-esports-club" checkout "%_target_ver_%" --force 2>&1
+if /i "%_target_ver_%"=="%BRANCH%" (
+    git -C "D:\endless-esports-club" checkout -B "%BRANCH%" "origin/%BRANCH%" 2>&1
+) else (
+    git -C "D:\endless-esports-club" checkout "%_target_ver_%" --force 2>&1
+)
 if !errorlevel! neq 0 (
     call :print_err "Git 切换版本失败，请确认版本号 '%_target_ver_%' 是否存在"
     echo.
