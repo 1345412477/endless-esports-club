@@ -243,9 +243,6 @@ class DbWrapper {
       this.sqlDb.run("ALTER TABLE config_workers ADD COLUMN manual_deposit_base REAL DEFAULT 0");
     } catch (_) {}
     try {
-      this.sqlDb.run("UPDATE config_workers SET manual_deposit_base = deposit WHERE manual_deposit_base = 0 AND deposit > 0");
-    } catch (_) {}
-    try {
       this.sqlDb.run("ALTER TABLE orders ADD COLUMN serial_no TEXT DEFAULT ''");
     } catch (_) {}
     try {
@@ -268,6 +265,81 @@ class DbWrapper {
     try {
       this.sqlDb.run("ALTER TABLE orders ADD COLUMN referrer_amount REAL DEFAULT 0");
     } catch (_) {}
+
+    // 修正历史版本冻结的押金基线（一次性）
+    this._correctFrozenDepositBase();
+  }
+
+  // 修正历史冻结的押金基线（一次性迁移，用 schema_migrations 表保证只执行一次）
+  // 背景：老版本每次启动都会执行 "manual_deposit_base = deposit WHERE manual_deposit_base = 0 AND deposit > 0"，
+  // 把订单自动填充的押金误固化为手工基线，导致待结算工资虚高、结算多付。
+  // 修正方式：按操作日志回放每位员工最后一次手工押金操作（改押金/编辑押金/押金退还），
+  // 重建正确基线；从未手工设置过押金的员工基线归零（其押金全部来自订单自动填充）。
+  _correctFrozenDepositBase() {
+    this.sqlDb.run(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TEXT DEFAULT (datetime('now','localtime'))
+      )
+    `);
+    const guard = this.prepare("SELECT COUNT(*) as cnt FROM schema_migrations WHERE name = ?").get('fix_frozen_deposit_base_20260820');
+    if (guard && guard.cnt > 0) return;
+
+    try {
+      // 操作日志不随员工改名联动，先建立 历史名 → 新名 的改名链
+      const successor = {};
+      const renameRows = this.prepare(
+        "SELECT detail FROM operation_logs WHERE action = '编辑员工' AND detail LIKE '%姓名改为%' ORDER BY created_at"
+      ).all();
+      for (const row of renameRows) {
+        const m = String(row.detail || '').match(/^员工：(.*?)，.*姓名改为"(.*?)"/);
+        if (m && m[1] !== m[2]) successor[m[1]] = m[2];
+      }
+      const resolveName = (name) => {
+        let cur = name;
+        let hops = 0;
+        while (successor[cur] !== undefined && hops++ < 100) cur = successor[cur];
+        return cur;
+      };
+
+      // 按时间顺序回放押金相关日志，重建每位员工（映射到当前姓名）的手工押金基线
+      const bases = {};
+      const logs = this.prepare(
+        "SELECT action, detail FROM operation_logs WHERE action IN ('修改押金', '押金全额退还', '编辑员工') ORDER BY created_at"
+      ).all();
+      for (const log of logs) {
+        const text = String(log.detail || '');
+        if (log.action === '修改押金') {
+          const m = text.match(/^员工：(.*?)，原押金：¥[\d.]+，新押金：¥([\d.]+)$/);
+          if (m) bases[resolveName(m[1])] = parseFloat(m[2]);
+        } else if (log.action === '押金全额退还') {
+          const m = text.match(/^员工：(.*?)，退还押金/);
+          if (m) bases[resolveName(m[1])] = 0;
+        } else {
+          const nameMatch = text.match(/^员工：(.*?)，/);
+          const depositMatch = text.match(/押金改为¥([\d.]+)/);
+          if (nameMatch && depositMatch) bases[resolveName(nameMatch[1])] = parseFloat(depositMatch[1]);
+        }
+      }
+
+      // 应用修正后的基线
+      let fixedCount = 0;
+      const workers = this.prepare('SELECT name, manual_deposit_base FROM config_workers').all();
+      for (const worker of workers) {
+        const correctBase = Number(bases[worker.name] !== undefined ? bases[worker.name] : 0);
+        const currentBase = Number(worker.manual_deposit_base || 0);
+        if (Math.abs(correctBase - currentBase) > 0.001) {
+          this.prepare('UPDATE config_workers SET manual_deposit_base = ? WHERE name = ?').run(correctBase, worker.name);
+          fixedCount++;
+          console.log(`[Migration] 员工【${worker.name}】押金基线修正：¥${currentBase.toFixed(2)} → ¥${correctBase.toFixed(2)}`);
+        }
+      }
+
+      this.sqlDb.run("INSERT INTO schema_migrations (name) VALUES ('fix_frozen_deposit_base_20260820')");
+      console.log(`[Migration] 押金基线修正完成，共修正 ${fixedCount} 名员工（在店员工押金余额随后自动重算）`);
+    } catch (err) {
+      console.error('[Migration] 押金基线修正失败，将在下次启动重试：', err.message);
+    }
   }
 
   prepare(sql) {
