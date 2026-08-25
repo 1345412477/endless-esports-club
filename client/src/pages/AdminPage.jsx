@@ -2707,7 +2707,7 @@ function LogsTab() {
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [filterModule, setFilterModule] = useState('')
-  const [filterAction, setFilterAction] = useState('')
+  const [filterKeyword, setFilterKeyword] = useState('')
   const [filterOperator, setFilterOperator] = useState('')
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
@@ -2715,7 +2715,7 @@ function LogsTab() {
   const buildFilterParams = () => {
     const params = new URLSearchParams()
     if (filterModule) params.append('module', filterModule)
-    if (filterAction) params.append('action', filterAction)
+    if (filterKeyword) params.append('keyword', filterKeyword)
     if (filterOperator) params.append('operator', filterOperator)
     if (filterStartDate) params.append('start_date', filterStartDate)
     if (filterEndDate) params.append('end_date', filterEndDate)
@@ -2737,7 +2737,7 @@ function LogsTab() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, filterModule, filterAction, filterOperator, filterStartDate, filterEndDate])
+  }, [page, pageSize, filterModule, filterKeyword, filterOperator, filterStartDate, filterEndDate])
 
   useEffect(() => {
     loadLogs()
@@ -2796,13 +2796,13 @@ function LogsTab() {
               <option value="工资结算">工资结算</option>
             </select>
           </div>
-          <div className="form-group" style={{ marginBottom: 0, minWidth: '160px' }}>
-            <label>操作内容</label>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: '200px' }}>
+            <label>关键词</label>
             <input
               type="text"
-              value={filterAction}
-              onChange={(e) => setFilterAction(e.target.value)}
-              placeholder="搜索操作..."
+              value={filterKeyword}
+              onChange={(e) => setFilterKeyword(e.target.value)}
+              placeholder="搜索模块/操作/详情/操作人..."
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0, minWidth: '140px' }}>

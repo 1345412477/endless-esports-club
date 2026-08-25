@@ -55,8 +55,8 @@ router.post('/cs', requireRole('admin'), async (req, res) => {
   const result = db.prepare('INSERT INTO config_cs (name, commission_rate, username, password) VALUES (?, ?, ?, ?)').run(
     name.trim(), rate, loginUsername, hashedPassword
   );
-  const logParts = [`客服：${name.trim()}`, `提成比例：${(rate * 100).toFixed(1)}%`];
-  if (loginUsername) logParts.push(`登录账号：${loginUsername}`);
+  const logParts = [`客服：${name.trim()}`];
+  if (loginUsername) logParts.push(`账号：${loginUsername}`);
   logAction('新增客服', '人员配置', logParts.join('，'), req.user.username);
   success(res, { id: result.lastInsertRowid });
 });
@@ -68,7 +68,7 @@ router.delete('/cs/:id', requireRole('admin'), (req, res) => {
     return notFound(res, '客服不存在');
   }
   db.prepare('DELETE FROM config_cs WHERE id = ?').run(req.params.id);
-  logAction('删除客服', '人员配置', `客服：${row.name}，提成比例：${(row.commission_rate * 100).toFixed(1)}%`, req.user.username);
+  logAction('删除客服', '人员配置', `客服：${row.name}`, req.user.username);
   success(res, null);
 });
 
@@ -84,7 +84,7 @@ router.put('/cs/:id/rate', requireRole('admin'), (req, res) => {
     return notFound(res, '客服不存在');
   }
   db.prepare('UPDATE config_cs SET commission_rate = ? WHERE id = ?').run(rate, req.params.id);
-  logAction('修改客服提成', '人员配置', `客服：${row.name}，提成比例：${(row.commission_rate * 100).toFixed(1)}% → ${(rate * 100).toFixed(1)}%`, req.user.username);
+  logAction('修改客服提成', '人员配置', `客服：${row.name}，提成：${(rate * 100).toFixed(1)}%`, req.user.username);
   success(res, null);
 });
 
@@ -97,7 +97,7 @@ router.put('/cs/:id/toggle', requireRole('admin'), (req, res) => {
   }
   const newActive = active ? 1 : 0;
   db.prepare('UPDATE config_cs SET active = ? WHERE id = ?').run(newActive, req.params.id);
-  logAction(newActive ? '启用客服' : '禁用客服', '人员配置', `客服：${row.name} → ${newActive ? '启用' : '禁用'}`, req.user.username);
+  logAction(newActive ? '启用客服' : '禁用客服', '人员配置', `客服：${row.name}`, req.user.username);
   success(res, null);
 });
 
@@ -125,7 +125,7 @@ router.put('/cs/:id/password', requireRole('admin'), async (req, res) => {
   const hashedPassword = newPassword ? await bcrypt.hash(newPassword, 10) : '';
   db.prepare('UPDATE config_cs SET username = ?, password = ? WHERE id = ?').run(newUsername, hashedPassword, req.params.id);
   const logParts = [`客服：${row.name}`];
-  if (newUsername) logParts.push(`登录账号：${newUsername}`);
+  if (newUsername) logParts.push(`账号：${newUsername}`);
   if (newPassword) logParts.push('密码已重置');
   logAction('重置客服账号', '人员配置', logParts.join('，'), req.user.username);
   success(res, null);
@@ -225,7 +225,7 @@ router.post('/workers', requireRole('admin', 'manager'), (req, res) => {
     return badRequest(res, '该姓名已存在');
   }
   const result = db.prepare('INSERT INTO config_workers (name, default_deduction_rate, rating, status, deposit, deposit_target) VALUES (?, ?, ?, ?, ?, ?)').run(name.trim(), rate, workerRating, workerStatus, depositAmt, depositTarget);
-  logAction('新增员工', '人员配置', `员工：${name.trim()}，抽成比例：${(rate * 100).toFixed(1)}%，评级：${workerRating}，状态：${workerStatus}，押金目标：¥${depositTarget}`, req.user.username);
+  logAction('新增员工', '人员配置', `员工：${name.trim()}，抽成：${(rate * 100).toFixed(1)}%，押金目标：¥${depositTarget}`, req.user.username);
   success(res, { id: result.lastInsertRowid });
 });
 
@@ -240,7 +240,7 @@ router.put('/workers/:id/rate', requireRole('admin'), (req, res) => {
     return notFound(res, '员工不存在');
   }
   db.prepare('UPDATE config_workers SET default_deduction_rate = ? WHERE id = ?').run(deduction_rate, req.params.id);
-  logAction('修改员工抽成', '人员配置', `员工：${row.name}，抽成比例：${(row.default_deduction_rate * 100).toFixed(1)}% → ${(deduction_rate * 100).toFixed(1)}%`, req.user.username);
+  logAction('修改员工抽成', '人员配置', `员工：${row.name}，抽成：${(deduction_rate * 100).toFixed(1)}%`, req.user.username);
   success(res, null);
 });
 
@@ -255,7 +255,7 @@ router.put('/workers/:id/rating', requireRole('admin'), (req, res) => {
     return notFound(res, '员工不存在');
   }
   db.prepare('UPDATE config_workers SET rating = ? WHERE id = ?').run(String(rating), req.params.id);
-  logAction('修改员工评级', '人员配置', `员工：${row.name}，评级：${row.rating || '无'} → ${rating}`, req.user.username);
+  logAction('修改员工评级', '人员配置', `员工：${row.name}，评级：${rating || '无'}`, req.user.username);
   success(res, null);
 });
 
@@ -271,7 +271,7 @@ router.put('/workers/:id/status', requireRole('admin'), (req, res) => {
     return notFound(res, '员工不存在');
   }
   db.prepare('UPDATE config_workers SET status = ? WHERE id = ?').run(status, req.params.id);
-  logAction('修改员工状态', '人员配置', `员工：${row.name}，状态：${row.status} → ${status}`, req.user.username);
+  logAction('修改员工状态', '人员配置', `员工：${row.name}，状态：${status}`, req.user.username);
   success(res, null);
 });
 
@@ -386,7 +386,7 @@ router.delete('/workers/:id', requireRole('admin'), (req, res) => {
     return notFound(res, '员工不存在');
   }
   db.prepare('DELETE FROM config_workers WHERE id = ?').run(req.params.id);
-  logAction('删除员工', '人员配置', `员工：${row.name}，评级：${row.rating || '无'}，状态：${row.status}`, req.user.username);
+  logAction('删除员工', '人员配置', `员工：${row.name}`, req.user.username);
   success(res, null);
 });
 
@@ -454,7 +454,7 @@ router.post('/managers', requireRole('admin'), async (req, res) => {
   const result = db.prepare('INSERT INTO config_managers (name, username, password) VALUES (?, ?, ?)').run(
     name.trim(), username.trim(), hashedPassword
   );
-  logAction('新增店长', '人员配置', `店长：${name.trim()}，登录账号：${username.trim()}`, req.user.username);
+  logAction('新增店长', '人员配置', `店长：${name.trim()}`, req.user.username);
   success(res, { id: result.lastInsertRowid });
 });
 
@@ -525,7 +525,7 @@ router.delete('/managers/:id', requireRole('admin'), (req, res) => {
     return notFound(res, '店长不存在');
   }
   db.prepare('DELETE FROM config_managers WHERE id = ?').run(req.params.id);
-  logAction('删除店长', '人员配置', `店长：${row.name}，登录账号：${row.username}`, req.user.username);
+  logAction('删除店长', '人员配置', `店长：${row.name}`, req.user.username);
   success(res, null);
 });
 

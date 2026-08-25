@@ -138,8 +138,8 @@ router.post('/', requireRole('cs', 'admin', 'manager'), (req, res) => {
 
   const { orderId, serialNo } = txn();
   const customerPart = customer_name ? `，客户：${customer_name}` : '';
-  const referrerPart = referrer_name ? `，推荐人：${referrer_name}(${referrer_type === 'worker' ? '员工' : '客服'})，提成：¥${referrerAmount.toFixed(2)}` : '';
-  logAction('创建订单', '订单管理', `订单#${orderId}，流水号：${serialNo}，客服：${cs_name}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workers.map(w => w.name).join('、')}${referrerPart}`, req.user.username);
+  const workerPart = workers.map(w => w.name).join('、');
+  logAction('创建订单', '订单管理', `订单#${orderId}，类型：${order_type}${customerPart}，金额：¥${price}，员工：${workerPart}`, req.user.username);
   success(res, { id: orderId, serial_no: serialNo });
 });
 
@@ -476,7 +476,7 @@ router.delete('/:id', requireRole('cs', 'admin', 'manager'), (req, res) => {
 
   try {
     txn();
-    logAction('删除订单', '订单管理', `${orderTag(order)}，状态：${order.status}，金额：¥${order.price}`, req.user.username);
+    logAction('删除订单', '订单管理', `${orderTag(order)}，金额：¥${order.price}`, req.user.username);
     success(res, null);
   } catch (e) {
     badRequest(res, e.message);

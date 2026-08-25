@@ -73,7 +73,7 @@ router.post('/', requireRole('admin'), (req, res) => {
     const newUnsettled = calcUnsettled(totalSalary, 0, newSettledTotal, newDepositFromOrders);
 
     const typeLabel = person_type === PERSON_TYPE_WORKER ? '员工' : '客服';
-    logAction('工资结算', '工资结算', `${typeLabel}：${person_name}，结算金额：¥${settledAmt.toFixed(2)}${person_type === PERSON_TYPE_WORKER ? `，当前押金：¥${newDeposit.toFixed(2)}` : ''}`, req.user.username);
+    logAction('工资结算', '工资结算', `${typeLabel}：${person_name}，结算：¥${settledAmt.toFixed(2)}`, req.user.username);
 
     success(res, { settled_amount: settledAmt, settled_total: newSettledTotal, unsettled: newUnsettled, deposit: newDeposit });
   } catch (e) {
@@ -110,7 +110,7 @@ router.post('/deposit', requireRole('admin'), (req, res) => {
 
   try {
     txn();
-    logAction('押金全额退还', '工资结算', `员工：${worker_name}，退还押金：¥${currentDeposit.toFixed(2)}（直接清零）`, req.user.username);
+    logAction('押金全额退还', '工资结算', `员工：${worker_name}，退还押金：¥${currentDeposit.toFixed(2)}`, req.user.username);
 
     success(res, { deposit: 0, refunded_amount: currentDeposit });
   } catch (e) {
@@ -146,7 +146,7 @@ router.post('/reverse/:id', requireRole('admin'), (req, res) => {
   try {
     txn();
     const typeLabel = record.person_type === PERSON_TYPE_WORKER ? '员工' : '客服';
-    logAction('撤销结算', '工资结算', `${typeLabel}：${record.person_name}，撤销金额：¥${record.settled_amount}，原结算时间：${record.settled_at}`, req.user.username);
+    logAction('撤销结算', '工资结算', `${typeLabel}：${record.person_name}，撤销结算：¥${record.settled_amount}`, req.user.username);
 
     success(res, null);
   } catch (e) {
@@ -215,7 +215,7 @@ router.put('/record/:id', requireRole('admin'), (req, res) => {
   try {
     txn();
     const typeLabel = record.person_type === PERSON_TYPE_WORKER ? '员工' : '客服';
-    logAction('修改结算记录', '工资结算', `${typeLabel}：${record.person_name}，原金额：¥${oldAmount.toFixed(2)}，新金额：¥${settledAmt.toFixed(2)}`, req.user.username);
+    logAction('修改结算记录', '工资结算', `${typeLabel}：${record.person_name}，结算改：¥${settledAmt.toFixed(2)}`, req.user.username);
     
     success(res, null);
   } catch (e) {
@@ -266,7 +266,7 @@ router.put('/adjust-settled', requireRole('admin'), (req, res) => {
   })();
 
   const typeLabel = person_type === PERSON_TYPE_WORKER ? '员工' : '客服';
-  logAction('修改已结算', '工资结算', `${typeLabel}：${person_name}，目标已结算：¥${targetSettled.toFixed(2)}`, req.user.username);
+  logAction('修改已结算', '工资结算', `${typeLabel}：${person_name}，已结算改：¥${targetSettled.toFixed(2)}`, req.user.username);
   success(res, null);
 });
 
@@ -293,7 +293,7 @@ router.put('/worker-unsettled', requireRole('admin'), (req, res) => {
     recalculateWorkerDeposit(db, worker_name);
   })();
 
-  logAction('修改未结算', '工资结算', `员工：${worker_name}，目标未结算：¥${unsettledAmt.toFixed(2)}`, req.user.username);
+  logAction('修改未结算', '工资结算', `员工：${worker_name}，未结算改：¥${unsettledAmt.toFixed(2)}`, req.user.username);
   success(res, null);
 });
 
@@ -321,7 +321,7 @@ router.put('/worker-deposit', requireRole('admin'), (req, res) => {
     db.prepare('UPDATE config_workers SET deposit = ?, manual_deposit_base = ? WHERE name = ?').run(depositAmt, depositAmt, worker_name);
   })();
 
-  logAction('修改押金', '工资结算', `员工：${worker_name}，原押金：¥${oldDeposit.toFixed(2)}，新押金：¥${depositAmt.toFixed(2)}`, req.user.username);
+  logAction('修改押金', '工资结算', `员工：${worker_name}，押金改：¥${depositAmt.toFixed(2)}`, req.user.username);
   success(res, null);
 });
 

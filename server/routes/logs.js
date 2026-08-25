@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get('/', requireRole('admin'), (req, res) => {
   const db = getDb();
-  const { module, action, operator, start_date, end_date, page = 1, size = 20 } = req.query;
+  const { module, action, operator, keyword, start_date, end_date, page = 1, size = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(size);
   const limit = Number(size);
 
@@ -25,6 +25,11 @@ router.get('/', requireRole('admin'), (req, res) => {
   if (operator) {
     where.push('operator LIKE ?');
     params.push(`%${operator}%`);
+  }
+  if (keyword) {
+    const kw = `%${keyword}%`;
+    where.push('(module LIKE ? OR action LIKE ? OR detail LIKE ? OR operator LIKE ?)');
+    params.push(kw, kw, kw, kw);
   }
   if (start_date) {
     where.push("date(created_at) >= date(?)");
@@ -56,7 +61,7 @@ function csvEscape(v) {
 
 router.get('/export', requireRole('admin'), (req, res) => {
   const db = getDb();
-  const { module, action, operator, start_date, end_date } = req.query;
+  const { module, action, operator, keyword, start_date, end_date } = req.query;
 
   let where = [];
   let params = [];
@@ -72,6 +77,11 @@ router.get('/export', requireRole('admin'), (req, res) => {
   if (operator) {
     where.push('operator LIKE ?');
     params.push(`%${operator}%`);
+  }
+  if (keyword) {
+    const kw = `%${keyword}%`;
+    where.push('(module LIKE ? OR action LIKE ? OR detail LIKE ? OR operator LIKE ?)');
+    params.push(kw, kw, kw, kw);
   }
   if (start_date) {
     where.push("date(created_at) >= date(?)");
