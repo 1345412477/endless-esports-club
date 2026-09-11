@@ -17,6 +17,9 @@
   <a href="https://github.com/1345412477/endless-esports-club">
     <img src="https://img.shields.io/github/stars/1345412477/endless-esports-club?style=for-the-badge" alt="Stars">
   </a>
+  <a href="https://github.com/1345412477/endless-esports-club/actions/workflows/ci.yml">
+    <img src="https://github.com/1345412477/endless-esports-club/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
 </p>
 
 > 专为电竞俱乐部打造的一站式业务管理平台，涵盖订单管理、人员配置、工资结算、数据统计等核心功能

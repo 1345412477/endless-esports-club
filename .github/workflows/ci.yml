@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build & Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build frontend (Vite)
+        run: npm run build
+
+      - name: Backend syntax check
+        run: find server -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Smoke test (root 200 + unknown API 404)
+        run: |
+          node server/index.js > server.log 2>&1 &
+          SERVER_PID=$!
+          # 等待服务就绪（最 20 秒）
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://localhost:3000/; then break; fi
+            sleep 1
+          done
+          code_root=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+          code_api=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/not-exist)
+          kill $SERVER_PID 2>/dev/null || true
+          test "$code_root" = "200" || { echo "root status=$code_root"; cat server.log; exit 1; }
+          test "$code_api" = "404" || { echo "unknown API expected 404, got $code_api"; cat server.log; exit 1; }
+          echo "smoke ok: root=$code_root unknown_api=$code_api"
